@@ -20,19 +20,27 @@
   "hooks": "./hooks/hooks.json",
   "userConfig": {
     "research_depth": {
+      "title": "Research Depth",
       "description": "How many search queries to run during research phase (3=quick, 7=thorough, 12=exhaustive)",
+      "type": "number",
       "sensitive": false
     },
     "auto_validate": {
-      "description": "Automatically validate plugin structure after generation (true/false)",
+      "title": "Auto Validate",
+      "description": "Automatically validate plugin structure after generation",
+      "type": "boolean",
       "sensitive": false
     },
     "default_complexity": {
+      "title": "Default Complexity",
       "description": "Default plugin complexity: minimal, standard, or full-featured",
+      "type": "string",
       "sensitive": false
     },
     "github_token": {
+      "title": "GitHub Token",
       "description": "GitHub personal access token for scanning repos and existing plugins (optional)",
+      "type": "string",
       "sensitive": true
     }
   }

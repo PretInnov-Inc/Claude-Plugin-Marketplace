@@ -23,23 +23,33 @@
   "outputStyles": "./output-styles/",
   "userConfig": {
     "scope_task_threshold": {
+      "title": "Scope Task Threshold",
       "description": "Max tasks before scope creep warning (default: 5, range: 3-15)",
+      "type": "number",
       "sensitive": false
     },
     "repetitive_edit_threshold": {
+      "title": "Repetitive Edit Threshold",
       "description": "Repeated edits before pattern alert (default: 5, range: 3-20)",
+      "type": "number",
       "sensitive": false
     },
     "auto_evolution": {
-      "description": "Enable auto-evolution from user feedback? (true/false, default: true)",
+      "title": "Auto Evolution",
+      "description": "Enable auto-evolution from user feedback?",
+      "type": "boolean",
       "sensitive": false
     },
     "default_output_style": {
-      "description": "Default output style: learning, terse, or verbose (default: learning)",
+      "title": "Default Output Style",
+      "description": "Output style: learning, terse, or verbose (default: learning)",
+      "type": "string",
       "sensitive": false
     },
     "health_alert_threshold": {
+      "title": "Health Alert Threshold",
       "description": "Session health score below which to alert (default: 40, range: 20-70)",
+      "type": "number",
       "sensitive": false
     }
   }
