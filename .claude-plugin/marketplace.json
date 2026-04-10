@@ -37,6 +37,16 @@
         "name": "Siddharth Gupta"
       },
       "category": "plugin-development"
+    },
+    {
+      "name": "sentinel",
+      "source": "./plugins/sentinel",
+      "version": "1.0.0",
+      "description": "Unified code review engine with 6 specialized agents, adaptive confidence scoring, security blocking, risk classification, and churn detection. Works with or without git.",
+      "author": {
+        "name": "Siddharth Gupta"
+      },
+      "category": "code-quality"
     }
   ]
 }

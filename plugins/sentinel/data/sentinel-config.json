@@ -1,0 +1,34 @@
+{
+  "churn_threshold": 5,
+  "auto_warn_on_risk": true,
+  "adaptive_confidence": {
+    "enabled": true,
+    "base_threshold": 80,
+    "min_threshold": 60,
+    "max_threshold": 95,
+    "decay_rate": 0.05,
+    "per_agent": {
+      "sentinel-reviewer": 80,
+      "bug-hunter": 80,
+      "error-auditor": 80,
+      "security-scanner": 70,
+      "test-analyzer": 80,
+      "code-polisher": 85
+    }
+  },
+  "agents": {
+    "sentinel-reviewer": {"enabled": true, "model": "sonnet"},
+    "bug-hunter": {"enabled": true, "model": "opus"},
+    "error-auditor": {"enabled": true, "model": "sonnet"},
+    "security-scanner": {"enabled": true, "model": "opus"},
+    "test-analyzer": {"enabled": true, "model": "haiku"},
+    "code-polisher": {"enabled": true, "model": "haiku"}
+  },
+  "review_modes": {
+    "full": ["sentinel-reviewer", "bug-hunter", "error-auditor", "security-scanner", "test-analyzer", "code-polisher"],
+    "quick": ["sentinel-reviewer", "bug-hunter"],
+    "security": ["security-scanner", "error-auditor"],
+    "quality": ["sentinel-reviewer", "code-polisher"],
+    "tests": ["test-analyzer"]
+  }
+}

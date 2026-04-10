@@ -1,0 +1,29 @@
+{
+  "description": "Sentinel — Unified code review engine. PreToolUse blocks security threats, PostToolUse tracks edits and risk signals.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks-handlers/pre-edit-security.py\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks-handlers/post-edit-tracker.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

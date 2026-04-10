@@ -1,0 +1,22 @@
+{
+  "name": "sentinel",
+  "version": "1.0.0",
+  "description": "Unified code review engine with 6 specialized agents, adaptive confidence scoring, security blocking, risk classification, and churn detection. Works with or without git.",
+  "author": {
+    "name": "Siddharth Gupta",
+    "url": "https://github.com/PretInnov-Inc"
+  },
+  "keywords": [
+    "code-review",
+    "security",
+    "verification",
+    "quality",
+    "testing",
+    "non-git",
+    "adaptive-confidence",
+    "multi-agent",
+    "bug-detection"
+  ],
+  "license": "MIT",
+  "commands": ["./commands"]
+}
