@@ -382,6 +382,21 @@ cortex-inspect export       # Export all data to cortex-export.json
 
 ---
 
+## Part of the PretInnov Plugin Ecosystem
+
+Cortex is one of 4 plugins in the [PretInnov Marketplace](../../README.md):
+
+| Plugin | What It Does |
+|--------|-------------|
+| **[Sentinel](../sentinel/README.md)** | 9-category unified intelligence — code review, AI dev, browser testing, memory, design, docs, infra, DX |
+| **[Clamper](../clamper/README.md)** | Code verification, project DNA, ecosystem scaffolding |
+| **Cortex** (you are here) | Self-learning intelligence — cross-project patterns, decision tracking, self-evolution |
+| **[Forge](../forge/README.md)** | Plugin builder — create full plugins from chat prompts |
+
+**Cortex + Sentinel:** Both track session intelligence but from different angles. Sentinel focuses on code review learnings and per-session health scores. Cortex focuses on cross-project behavioral patterns and self-evolution. They complement each other — Sentinel makes your code better, Cortex makes your workflow better.
+
+---
+
 ## License
 
 MIT — By Siddharth Gupta | [PretInnov Technologies](https://github.com/PretInnov-Inc)
