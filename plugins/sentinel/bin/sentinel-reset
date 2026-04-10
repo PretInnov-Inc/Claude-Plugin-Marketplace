@@ -1,0 +1,99 @@
+#!/usr/bin/env python3
+"""
+sentinel-reset — Archive and clear Sentinel data files.
+Moves current data to a timestamped archive before clearing.
+Available as a bare command in the Bash tool when sentinel plugin is enabled.
+Usage: sentinel-reset [--confirm] [--archive-only]
+"""
+
+import json
+import os
+import shutil
+import sys
+from datetime import datetime
+from pathlib import Path
+
+
+def get_data_dir():
+    plugin_root = os.environ.get("CLAUDE_PLUGIN_ROOT", str(Path(__file__).parent.parent))
+    return Path(plugin_root) / "data"
+
+
+DATA_FILES = [
+    "learnings.jsonl",
+    "decisions.jsonl",
+    "anti-patterns.jsonl",
+    "session-log.jsonl",
+    "edit-log.jsonl",
+]
+
+
+def count_lines(path):
+    if not path.exists():
+        return 0
+    try:
+        return sum(1 for line in open(path) if line.strip())
+    except Exception:
+        return 0
+
+
+def main():
+    args = sys.argv[1:]
+    confirmed = "--confirm" in args
+    archive_only = "--archive-only" in args
+
+    data_dir = get_data_dir()
+
+    # Show current state
+    print("Sentinel Reset")
+    print("═" * 40)
+    print("Current data:")
+    total = 0
+    for fname in DATA_FILES:
+        count = count_lines(data_dir / fname)
+        total += count
+        print(f"  {fname:<30} {count:>5} records")
+    print(f"  {'TOTAL':<30} {total:>5} records")
+    print("")
+
+    if total == 0:
+        print("Nothing to reset — all files are already empty.")
+        return
+
+    if not confirmed and not archive_only:
+        print("This will archive current data to data/archive/ and clear all JSONL files.")
+        print("Re-run with --confirm to proceed, or --archive-only to archive without clearing.")
+        print("")
+        print("  sentinel-reset --confirm        Archive + clear")
+        print("  sentinel-reset --archive-only   Archive only (keep originals)")
+        return
+
+    # Create archive
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    archive_dir = data_dir / "archive" / ts
+    archive_dir.mkdir(parents=True, exist_ok=True)
+
+    print(f"Archiving to: data/archive/{ts}/")
+    for fname in DATA_FILES:
+        src = data_dir / fname
+        if src.exists() and count_lines(src) > 0:
+            shutil.copy2(src, archive_dir / fname)
+            print(f"  Archived: {fname}")
+
+    if not archive_only:
+        print("")
+        print("Clearing data files...")
+        for fname in DATA_FILES:
+            path = data_dir / fname
+            if path.exists():
+                path.write_text("")
+                print(f"  Cleared:  {fname}")
+
+    print("")
+    print(f"Done. Archive saved to: data/archive/{ts}/")
+    if not archive_only:
+        print("Sentinel memory has been reset. Fresh learnings will accumulate from next session.")
+
+
+if __name__ == "__main__":
+    main()

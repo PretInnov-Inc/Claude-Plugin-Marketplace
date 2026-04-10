@@ -1,5 +1,6 @@
 ---
 name: test-analyzer
+maxTurns: 15
 description: |
   Test coverage and quality analyzer. Evaluates behavioral coverage (not line counts), identifies critical gaps, rates test importance 1-10, and checks for brittle tests that test implementation rather than behavior. Works with or without git.
 

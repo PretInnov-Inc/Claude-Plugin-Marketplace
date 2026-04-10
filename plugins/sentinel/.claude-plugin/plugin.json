@@ -1,22 +1,52 @@
 {
   "name": "sentinel",
-  "version": "1.0.0",
-  "description": "Unified code review engine with 6 specialized agents, adaptive confidence scoring, security blocking, risk classification, and churn detection. Works with or without git.",
+  "description": "Sentinel — 9-category unified intelligence plugin. Consolidates code review, AI dev toolkit, output styles, browser testing, workflow memory, frontend design, documentation, infrastructure, and DX tools into one robust system.",
+  "version": "2.1.0",
+  "homepage": "https://github.com/guptaji/autonomous/sentinel",
+  "license": "MIT",
   "author": {
-    "name": "Siddharth Gupta",
-    "url": "https://github.com/PretInnov-Inc"
+    "name": "GuptaJi"
   },
   "keywords": [
-    "code-review",
-    "security",
-    "verification",
-    "quality",
-    "testing",
-    "non-git",
-    "adaptive-confidence",
-    "multi-agent",
-    "bug-detection"
+    "code-review", "security", "verification", "quality", "testing",
+    "ai-development", "plugin-building", "agent-design", "mcp-server",
+    "output-style", "learning-mode", "educational",
+    "browser-testing", "playwright", "accessibility",
+    "workflow-memory", "session-intelligence", "decision-tracking",
+    "frontend-design", "ui-components", "design-system",
+    "documentation", "seo", "content-strategy",
+    "infrastructure", "data-engineering", "airflow",
+    "dx", "hooks", "claude-md", "automation"
   ],
-  "license": "MIT",
-  "commands": ["./commands"]
+  "userConfig": {
+    "output_style": {
+      "type": "string",
+      "enum": ["focused", "learning", "verbose"],
+      "default": "focused",
+      "description": "Active output style injected at session start"
+    },
+    "churn_threshold": {
+      "type": "integer",
+      "default": 5,
+      "description": "Number of edits to the same file before churn warning fires"
+    },
+    "confidence_threshold": {
+      "type": "integer",
+      "default": 80,
+      "minimum": 60,
+      "maximum": 95,
+      "description": "Review agent confidence threshold (lower = more findings)"
+    },
+    "memory_enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether to inject past session learnings at SessionStart"
+    },
+    "a11y_wcag_level": {
+      "type": "string",
+      "enum": ["A", "AA", "AAA"],
+      "default": "AA",
+      "description": "WCAG conformance level for accessibility audits"
+    }
+  }
 }

@@ -1,0 +1,101 @@
+#!/usr/bin/env python3
+"""
+sentinel-status — Print current Sentinel health score and recent learnings.
+Available as a bare command in the Bash tool when sentinel plugin is enabled.
+Usage: sentinel-status [--json]
+"""
+
+import json
+import os
+import sys
+from pathlib import Path
+
+def get_data_dir():
+    plugin_root = os.environ.get("CLAUDE_PLUGIN_ROOT", str(Path(__file__).parent.parent))
+    return Path(plugin_root) / "data"
+
+def read_jsonl_tail(path, n):
+    if not path.exists():
+        return []
+    items = []
+    try:
+        with open(path) as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    try:
+                        items.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        continue
+    except Exception:
+        return []
+    return items[-n:]
+
+def main():
+    as_json = "--json" in sys.argv
+    data_dir = get_data_dir()
+
+    # Session health
+    sessions = read_jsonl_tail(data_dir / "session-log.jsonl", 10)
+    stops = [s for s in sessions if s.get("event") == "session_stop"]
+    scores = [s.get("health_score", 0) for s in stops if "health_score" in s]
+
+    if as_json:
+        learnings = read_jsonl_tail(data_dir / "learnings.jsonl", 5)
+        aps = read_jsonl_tail(data_dir / "anti-patterns.jsonl", 3)
+        print(json.dumps({
+            "last_health": scores[-1] if scores else None,
+            "avg_health": round(sum(scores) / len(scores), 1) if scores else None,
+            "sessions_tracked": len(stops),
+            "learnings_count": sum(1 for _ in open(data_dir / "learnings.jsonl")) if (data_dir / "learnings.jsonl").exists() else 0,
+            "recent_learnings": [l.get("learning", "") for l in learnings],
+            "recent_anti_patterns": [ap.get("pattern", "") for ap in aps],
+        }, indent=2))
+        return
+
+    print("═══════════════════════════════════════")
+    print("  Sentinel Status")
+    print("═══════════════════════════════════════")
+
+    if scores:
+        last = scores[-1]
+        avg = sum(scores) / len(scores)
+        trend = "↑ improving" if len(scores) >= 2 and scores[-1] > scores[0] else "↓ declining" if len(scores) >= 2 and scores[-1] < scores[0] else "→ stable"
+        bar = "█" * (last // 10) + "░" * (10 - last // 10)
+        health_label = "GOOD" if last >= 70 else "WARNING" if last >= 40 else "LOW"
+        print(f"  Health:   [{bar}] {last}/100 ({health_label})")
+        print(f"  Average:  {avg:.0f}/100 over {len(stops)} sessions | Trend: {trend}")
+    else:
+        print("  Health:   No session data yet")
+
+    print("")
+
+    # Recent learnings
+    learnings = read_jsonl_tail(data_dir / "learnings.jsonl", 5)
+    if learnings:
+        print("  Recent Learnings:")
+        for l in learnings:
+            cat = l.get("category", "general")
+            msg = l.get("learning", "").strip()[:80]
+            if msg:
+                print(f"    [{cat}] {msg}")
+    else:
+        print("  Learnings: None yet (sessions will populate this)")
+
+    print("")
+
+    # Anti-patterns
+    aps = read_jsonl_tail(data_dir / "anti-patterns.jsonl", 3)
+    if aps:
+        print("  Active Anti-Patterns:")
+        for ap in aps:
+            pattern = ap.get("pattern", "").strip()[:80]
+            if pattern:
+                print(f"    AVOID: {pattern}")
+
+    print("")
+    print("  Commands: sentinel-report | sentinel-reset | /sentinel:flow-memory")
+    print("═══════════════════════════════════════")
+
+if __name__ == "__main__":
+    main()

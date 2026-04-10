@@ -1,6 +1,7 @@
 {
   "churn_threshold": 5,
   "auto_warn_on_risk": true,
+
   "adaptive_confidence": {
     "enabled": true,
     "base_threshold": 80,
@@ -16,19 +17,68 @@
       "code-polisher": 85
     }
   },
+
   "agents": {
-    "sentinel-reviewer": {"enabled": true, "model": "sonnet"},
-    "bug-hunter": {"enabled": true, "model": "opus"},
-    "error-auditor": {"enabled": true, "model": "sonnet"},
-    "security-scanner": {"enabled": true, "model": "opus"},
-    "test-analyzer": {"enabled": true, "model": "haiku"},
-    "code-polisher": {"enabled": true, "model": "haiku"}
+    "sentinel-reviewer":  {"enabled": true, "model": "sonnet"},
+    "bug-hunter":         {"enabled": true, "model": "opus"},
+    "error-auditor":      {"enabled": true, "model": "sonnet"},
+    "security-scanner":   {"enabled": true, "model": "opus"},
+    "test-analyzer":      {"enabled": true, "model": "haiku"},
+    "code-polisher":      {"enabled": true, "model": "haiku"},
+    "ai-architect":       {"enabled": true, "model": "opus"},
+    "ai-builder":         {"enabled": true, "model": "sonnet"},
+    "ai-validator":       {"enabled": true, "model": "haiku"},
+    "style-conductor":    {"enabled": true, "model": "haiku"},
+    "web-pilot":          {"enabled": true, "model": "sonnet"},
+    "a11y-auditor":       {"enabled": true, "model": "haiku"},
+    "session-scribe":     {"enabled": true, "model": "haiku"},
+    "memory-warden":      {"enabled": true, "model": "sonnet"},
+    "ui-architect":       {"enabled": true, "model": "opus"},
+    "style-writer":       {"enabled": true, "model": "sonnet"},
+    "doc-writer":         {"enabled": true, "model": "sonnet"},
+    "content-strategist": {"enabled": true, "model": "opus"},
+    "pipeline-builder":   {"enabled": true, "model": "sonnet"},
+    "data-profiler":      {"enabled": true, "model": "haiku"},
+    "workspace-curator":  {"enabled": true, "model": "sonnet"}
   },
+
   "review_modes": {
-    "full": ["sentinel-reviewer", "bug-hunter", "error-auditor", "security-scanner", "test-analyzer", "code-polisher"],
-    "quick": ["sentinel-reviewer", "bug-hunter"],
+    "full":     ["sentinel-reviewer", "bug-hunter", "error-auditor", "security-scanner", "test-analyzer", "code-polisher"],
+    "quick":    ["sentinel-reviewer", "bug-hunter"],
     "security": ["security-scanner", "error-auditor"],
-    "quality": ["sentinel-reviewer", "code-polisher"],
-    "tests": ["test-analyzer"]
+    "quality":  ["sentinel-reviewer", "code-polisher"],
+    "tests":    ["test-analyzer"]
+  },
+
+  "output_style": {
+    "active": "focused",
+    "available": ["focused", "learning", "verbose"],
+    "inject_on_session_start": true
+  },
+
+  "memory": {
+    "enabled": true,
+    "max_learnings_in_context": 15,
+    "max_decisions_in_context": 5,
+    "max_anti_patterns_in_context": 8,
+    "session_health_warn_below": 40,
+    "auto_extract_learnings": true
+  },
+
+  "ai_forge": {
+    "research_before_build": true,
+    "always_blueprint_first": true,
+    "validate_after_generate": true
+  },
+
+  "browser": {
+    "default_viewport": "1280x720",
+    "a11y_wcag_level": "AA",
+    "screenshot_on_fail": true
+  },
+
+  "infra": {
+    "dag_test_before_deploy": true,
+    "lineage_tracking": true
   }
 }

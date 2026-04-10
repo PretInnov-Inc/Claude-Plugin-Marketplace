@@ -1,19 +1,9 @@
 ---
 name: sentinel
-version: 1.0.0
+version: 2.1.0
 description: "Unified code review engine. Use when the user asks to review code, check quality, find bugs, audit security, or verify changes. Works with or without git. Auto-detects scope from git diff or session edit tracking."
-triggers:
-  - "review my code"
-  - "check this code"
-  - "find bugs"
-  - "code review"
-  - "security review"
-  - "check for issues"
-  - "is this code safe"
-  - "review changes"
-  - "audit this"
-  - "quality check"
-  - "does this look right"
+argument-hint: "[full|quick|security|quality|tests|<file-path>]"
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash, TodoWrite, Agent
 ---
 
 # Sentinel — Unified Code Review Engine

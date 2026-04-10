@@ -1,5 +1,6 @@
 ---
 name: code-polisher
+maxTurns: 25
 description: |
   Post-review code simplification and polish. Runs AFTER other review agents pass. Simplifies code for clarity, reduces unnecessary complexity, and applies project conventions — all while preserving exact behavior. Language-agnostic.
 
