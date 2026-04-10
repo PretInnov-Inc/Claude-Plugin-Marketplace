@@ -1,6 +1,6 @@
 {
   "name": "clamper",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Clip it, Clamp it. One-command ecosystem initialization, verification loop, and deep project DNA. /init scaffolds the full cross-platform agent ecosystem for any project.",
   "author": {
     "name": "Siddharth Gupta",
@@ -19,6 +19,5 @@
     "scaffolding"
   ],
   "license": "MIT",
-  "commands": ["./commands"],
-  "hooks": "./hooks/hooks.json"
+  "commands": ["./commands"]
 }

@@ -11,7 +11,7 @@
     {
       "name": "clamper",
       "source": "./plugins/clamper",
-      "version": "1.1.0",
+      "version": "1.1.1",
       "description": "Verification loop, deep project DNA extraction, and one-command ecosystem initialization. Clip it, Clamp it.",
       "author": {
         "name": "Siddharth Gupta"
@@ -21,7 +21,7 @@
     {
       "name": "cortex",
       "source": "./plugins/cortex",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "description": "Self-learning intelligence layer that captures learnings, patterns, and decisions across sessions and injects them back automatically.",
       "author": {
         "name": "Siddharth Gupta"
@@ -31,7 +31,7 @@
     {
       "name": "forge",
       "source": "./plugins/forge",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "description": "Meta-plugin that creates production-grade Claude Code plugins through a 4-phase pipeline: internet research, clarifying questions, architecture blueprint, and full code generation.",
       "author": {
         "name": "Siddharth Gupta"
