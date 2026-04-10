@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "thresholds": {
+    "scope_task_threshold": 5,
+    "scope_word_threshold": 300,
+    "repetitive_edit_threshold": 5,
+    "low_health_threshold": 40,
+    "auto_suppress_after_ignores": 10,
+    "pattern_promotion_threshold": 5,
+    "max_auto_evolutions_per_session": 3
+  },
+  "suppressed_warnings": [],
+  "project_overrides": {},
+  "evolution_stats": {
+    "total_evolutions": 0,
+    "learnings_added": 0,
+    "rules_suppressed": 0,
+    "thresholds_tuned": 0,
+    "last_evolution": null
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "name": "cortex",
+  "version": "1.0.0",
+  "description": "Self-learning intelligence layer that auto-extracts learnings, mines patterns, tracks decisions, and continuously optimizes your Claude Code workflow across all projects and sessions.",
+  "author": {
+    "name": "Siddharth Gupta",
+    "url": "https://github.com/PretInnov-Inc"
+  },
+  "keywords": [
+    "intelligence",
+    "auto-learning",
+    "self-healing",
+    "pattern-mining",
+    "decision-tracking",
+    "memory",
+    "optimization",
+    "multi-agent",
+    "agentic-workflow"
+  ],
+  "license": "MIT",
+  "skills": ["./skills"],
+  "hooks": "./hooks/hooks.json",
+  "outputStyles": "./output-styles/",
+  "userConfig": {
+    "scope_task_threshold": {
+      "description": "Max tasks before scope creep warning (default: 5, range: 3-15)",
+      "sensitive": false
+    },
+    "repetitive_edit_threshold": {
+      "description": "Repeated edits before pattern alert (default: 5, range: 3-20)",
+      "sensitive": false
+    },
+    "auto_evolution": {
+      "description": "Enable auto-evolution from user feedback? (true/false, default: true)",
+      "sensitive": false
+    },
+    "default_output_style": {
+      "description": "Default output style: learning, terse, or verbose (default: learning)",
+      "sensitive": false
+    },
+    "health_alert_threshold": {
+      "description": "Session health score below which to alert (default: 40, range: 20-70)",
+      "sensitive": false
+    }
+  }
+}

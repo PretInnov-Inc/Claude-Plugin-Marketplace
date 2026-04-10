@@ -1,0 +1,20 @@
+[project]
+name = "clamper-mcp"
+version = "1.0.0"
+description = "Clamper MCP Server — Deep project DNA, outcome store, and device mesh bridge"
+requires-python = ">=3.10"
+dependencies = [
+    "fastmcp>=2.0.0",
+]
+
+[project.optional-dependencies]
+mesh = [
+    "paho-mqtt>=2.0.0",
+]
+
+[project.scripts]
+clamper-mcp = "clamper_mcp.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

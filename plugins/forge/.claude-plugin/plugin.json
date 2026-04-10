@@ -1,0 +1,39 @@
+{
+  "name": "forge",
+  "version": "1.0.0",
+  "description": "Meta-plugin that creates production-grade Claude Code plugins through a 4-phase pipeline: internet research, clarifying questions, architecture blueprint, and full code generation. Learns from every build to improve future plugin quality.",
+  "author": {
+    "name": "Siddharth Gupta",
+    "url": "https://github.com/PretInnov-Inc"
+  },
+  "keywords": [
+    "plugin-builder",
+    "meta-plugin",
+    "scaffold",
+    "generator",
+    "plugin-development",
+    "forge",
+    "architecture"
+  ],
+  "license": "MIT",
+  "skills": ["./skills"],
+  "hooks": "./hooks/hooks.json",
+  "userConfig": {
+    "research_depth": {
+      "description": "How many search queries to run during research phase (3=quick, 7=thorough, 12=exhaustive)",
+      "sensitive": false
+    },
+    "auto_validate": {
+      "description": "Automatically validate plugin structure after generation (true/false)",
+      "sensitive": false
+    },
+    "default_complexity": {
+      "description": "Default plugin complexity: minimal, standard, or full-featured",
+      "sensitive": false
+    },
+    "github_token": {
+      "description": "GitHub personal access token for scanning repos and existing plugins (optional)",
+      "sensitive": true
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "thresholds": {
+    "verification_confidence_minimum": 80,
+    "dna_cache_ttl_hours": 24,
+    "fragile_zone_churn_threshold": 10,
+    "fragile_zone_coverage_minimum": 50,
+    "auto_verify_on_edit": true,
+    "max_verification_retries": 2
+  },
+  "suppressed_warnings": [],
+  "project_overrides": {},
+  "verification_stats": {
+    "total_verifications": 0,
+    "passed": 0,
+    "failed": 0,
+    "flagged_for_review": 0,
+    "last_verification": null
+  },
+  "dna_stats": {
+    "total_extractions": 0,
+    "projects_analyzed": 0,
+    "last_extraction": null
+  },
+  "init_stats": {
+    "total_inits": 0,
+    "projects_initialized": [],
+    "last_init": null
+  }
+}

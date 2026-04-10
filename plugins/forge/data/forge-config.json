@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "thresholds": {
+    "research_queries_min": 3,
+    "research_queries_max": 12,
+    "clarify_questions_min": 4,
+    "clarify_questions_max": 8,
+    "blueprint_approval_required": true,
+    "auto_validate_after_generate": true,
+    "max_files_per_generation": 50,
+    "learning_promotion_threshold": 3
+  },
+  "defaults": {
+    "complexity": "full-featured",
+    "target_platform": "claude-code",
+    "hook_handler_language": "python",
+    "data_format": "jsonl",
+    "agent_default_model": "sonnet"
+  },
+  "suppressed_warnings": [],
+  "project_overrides": {},
+  "build_stats": {
+    "total_builds": 0,
+    "successful_builds": 0,
+    "failed_builds": 0,
+    "plugins_generated": [],
+    "total_files_generated": 0,
+    "total_agents_generated": 0,
+    "total_skills_generated": 0,
+    "total_hooks_generated": 0,
+    "last_build": null
+  },
+  "research_stats": {
+    "total_searches": 0,
+    "total_repos_scanned": 0,
+    "total_docs_fetched": 0,
+    "last_research": null
+  },
+  "learning_stats": {
+    "total_learnings": 0,
+    "patterns_promoted": 0,
+    "last_learning": null
+  }
+}

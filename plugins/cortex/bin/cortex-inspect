@@ -1,0 +1,402 @@
+#!/usr/bin/env python3
+"""
+Cortex Inspect — standalone CLI for Cortex intelligence data.
+Use outside Claude Code sessions to check health, view learnings, or trim data.
+
+Usage:
+    cortex-inspect health          Full health check of Cortex data
+    cortex-inspect learnings       Show all active learnings
+    cortex-inspect anti-patterns   Show all anti-patterns
+    cortex-inspect decisions       Show decision journal summary
+    cortex-inspect patterns        Show detected patterns
+    cortex-inspect sessions        Show recent session history
+    cortex-inspect config          Show current config and thresholds
+    cortex-inspect stats           Quick stats summary
+    cortex-inspect trim            Trim data files to safe sizes
+    cortex-inspect export          Export all intelligence as JSON
+"""
+
+import json
+import os
+import sys
+from pathlib import Path
+from datetime import datetime
+
+# Resolve data directory
+# When run via plugin bin/, CLAUDE_PLUGIN_ROOT is set
+# When run standalone, look relative to this script
+SCRIPT_DIR = Path(__file__).resolve().parent.parent
+DATA_DIR = Path(os.environ.get("CLAUDE_PLUGIN_ROOT", SCRIPT_DIR)) / "data"
+
+# ANSI colors
+BOLD = "\033[1m"
+GREEN = "\033[32m"
+YELLOW = "\033[33m"
+RED = "\033[31m"
+CYAN = "\033[36m"
+DIM = "\033[2m"
+RESET = "\033[0m"
+
+# Trim limits
+TRIM_LIMITS = {
+    "tool-usage.jsonl": 2000,
+    "prompt-log.jsonl": 500,
+    "session-log.jsonl": 1000,
+    "learnings.jsonl": 200,
+    "anti-patterns.jsonl": 100,
+    "decision-journal.jsonl": 500,
+    "evolution-log.jsonl": 500,
+    "user-feedback.jsonl": 200,
+    "patterns.jsonl": 200,
+}
+
+
+def read_jsonl(filename):
+    """Read a JSONL file and return list of parsed objects."""
+    filepath = DATA_DIR / filename
+    if not filepath.exists():
+        return []
+    items = []
+    with open(filepath) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+                if not obj.get("_init"):  # skip init markers
+                    items.append(obj)
+            except json.JSONDecodeError:
+                pass
+    return items
+
+
+def read_json(filename):
+    """Read a JSON file."""
+    filepath = DATA_DIR / filename
+    if not filepath.exists():
+        return {}
+    with open(filepath) as f:
+        return json.load(f)
+
+
+def file_size_kb(filename):
+    """Get file size in KB."""
+    filepath = DATA_DIR / filename
+    if not filepath.exists():
+        return 0
+    return filepath.stat().st_size / 1024
+
+
+def print_header(title):
+    print(f"\n{BOLD}{CYAN}{'=' * 50}{RESET}")
+    print(f"{BOLD}{CYAN}  {title}{RESET}")
+    print(f"{BOLD}{CYAN}{'=' * 50}{RESET}\n")
+
+
+def print_section(title):
+    print(f"\n{BOLD}{title}{RESET}")
+    print(f"{DIM}{'─' * 40}{RESET}")
+
+
+# ─────────────────────────────────────────────
+# Commands
+# ─────────────────────────────────────────────
+
+
+def cmd_health():
+    """Full health check."""
+    print_header("CORTEX HEALTH CHECK")
+
+    # Data integrity
+    print_section("Data Integrity")
+    all_ok = True
+    for filename in sorted(TRIM_LIMITS.keys()):
+        filepath = DATA_DIR / filename
+        if not filepath.exists():
+            print(f"  {RED}MISSING{RESET}  {filename}")
+            all_ok = False
+            continue
+        items = read_jsonl(filename)
+        size = file_size_kb(filename)
+        limit = TRIM_LIMITS[filename]
+        status = f"{GREEN}OK{RESET}" if len(items) <= limit else f"{YELLOW}LARGE{RESET}"
+        print(f"  {status}  {filename}: {len(items)} entries, {size:.1f} KB (limit: {limit})")
+
+    # Config
+    print_section("Config")
+    config = read_json("cortex-config.json")
+    if config:
+        thresholds = config.get("thresholds", {})
+        for key, val in thresholds.items():
+            print(f"  {key}: {val}")
+        suppressed = config.get("suppressed_warnings", [])
+        print(f"  Suppressed warnings: {len(suppressed)}")
+        overrides = config.get("project_overrides", {})
+        print(f"  Project overrides: {len(overrides)}")
+    else:
+        print(f"  {RED}cortex-config.json not found{RESET}")
+
+    # Evolution stats
+    print_section("Evolution")
+    stats = config.get("evolution_stats", {})
+    print(f"  Total evolutions: {stats.get('total_evolutions', 0)}")
+    print(f"  Learnings added: {stats.get('learnings_added', 0)}")
+    print(f"  Rules suppressed: {stats.get('rules_suppressed', 0)}")
+    print(f"  Thresholds tuned: {stats.get('thresholds_tuned', 0)}")
+    print(f"  Last evolution: {stats.get('last_evolution', 'never')}")
+
+    # Summary counts
+    print_section("Intelligence Summary")
+    learnings = read_jsonl("learnings.jsonl")
+    anti_patterns = read_jsonl("anti-patterns.jsonl")
+    decisions = read_jsonl("decision-journal.jsonl")
+    patterns = read_jsonl("patterns.jsonl")
+    sessions = read_jsonl("session-log.jsonl")
+
+    print(f"  Active learnings: {len(learnings)}")
+    print(f"  Anti-patterns: {len(anti_patterns)}")
+    print(f"  Decisions: {len(decisions)}")
+    print(f"  Patterns: {len(patterns)}")
+    print(f"  Sessions tracked: {len(sessions)}")
+
+    # Decision outcomes
+    outcomes = {"success": 0, "failure": 0, "pending": 0}
+    for d in decisions:
+        o = d.get("outcome", "pending")
+        outcomes[o] = outcomes.get(o, 0) + 1
+    print(f"  Decision outcomes: {outcomes['success']}S / {outcomes['failure']}F / {outcomes['pending']}P")
+
+    # Overall verdict
+    issues = []
+    if not all_ok:
+        issues.append("missing data files")
+    if len(learnings) == 0:
+        issues.append("no learnings")
+    if stats.get("total_evolutions", 0) == 0:
+        issues.append("no evolutions yet")
+
+    print_section("Verdict")
+    if not issues:
+        print(f"  {GREEN}{BOLD}HEALTHY{RESET}")
+    else:
+        print(f"  {YELLOW}{BOLD}ATTENTION NEEDED{RESET}: {', '.join(issues)}")
+
+
+def cmd_learnings():
+    """Show all learnings."""
+    print_header("ACTIVE LEARNINGS")
+    items = read_jsonl("learnings.jsonl")
+    if not items:
+        print("  No learnings recorded yet.")
+        return
+    for i, item in enumerate(items, 1):
+        cat = item.get("category", "general")
+        learning = item.get("learning", "")
+        source = item.get("source", "unknown")
+        print(f"  {BOLD}{i}.{RESET} [{CYAN}{cat}{RESET}] {learning}")
+        print(f"     {DIM}source: {source}{RESET}")
+
+
+def cmd_anti_patterns():
+    """Show all anti-patterns."""
+    print_header("ANTI-PATTERNS")
+    items = read_jsonl("anti-patterns.jsonl")
+    if not items:
+        print("  No anti-patterns recorded yet.")
+        return
+    for i, item in enumerate(items, 1):
+        what = item.get("what", "")
+        why = item.get("why", "")
+        cat = item.get("category", "general")
+        print(f"  {BOLD}{i}.{RESET} {RED}AVOID:{RESET} {what}")
+        if why:
+            print(f"     {DIM}Reason: {why}{RESET}")
+        print(f"     {DIM}Category: {cat}{RESET}")
+
+
+def cmd_decisions():
+    """Show decision journal."""
+    print_header("DECISION JOURNAL")
+    items = read_jsonl("decision-journal.jsonl")
+    if not items:
+        print("  No decisions recorded yet.")
+        return
+
+    outcomes = {"success": 0, "failure": 0, "pending": 0}
+    for d in items:
+        o = d.get("outcome", "pending")
+        outcomes[o] = outcomes.get(o, 0) + 1
+
+    print(f"  Total: {len(items)} decisions ({GREEN}{outcomes['success']}S{RESET} / {RED}{outcomes['failure']}F{RESET} / {YELLOW}{outcomes['pending']}P{RESET})\n")
+
+    for i, item in enumerate(items, 1):
+        decision = item.get("decision", "")
+        dtype = item.get("type", "")
+        project = item.get("project", "")
+        outcome = item.get("outcome", "pending")
+        icon = f"{GREEN}OK{RESET}" if outcome == "success" else (f"{RED}FAIL{RESET}" if outcome == "failure" else f"{YELLOW}?{RESET}")
+        print(f"  {BOLD}{i}.{RESET} [{icon}] {decision}")
+        print(f"     {DIM}type: {dtype} | project: {project}{RESET}")
+
+
+def cmd_patterns():
+    """Show detected patterns."""
+    print_header("DETECTED PATTERNS")
+    items = read_jsonl("patterns.jsonl")
+    if not items:
+        print("  No patterns detected yet.")
+        return
+    for i, item in enumerate(items, 1):
+        pattern = item.get("pattern", "")
+        detail = item.get("detail", "")
+        confidence = item.get("confidence", "unknown")
+        print(f"  {BOLD}{i}.{RESET} [{CYAN}{pattern}{RESET}] {detail}")
+        print(f"     {DIM}confidence: {confidence}{RESET}")
+
+
+def cmd_sessions():
+    """Show recent sessions."""
+    print_header("RECENT SESSIONS")
+    items = read_jsonl("session-log.jsonl")
+    if not items:
+        print("  No sessions tracked yet.")
+        return
+    # Show last 20
+    for item in items[-20:]:
+        event = item.get("event", "")
+        sid = item.get("session_id", "unknown")[:12]
+        cwd = item.get("cwd", "")
+        ts = item.get("timestamp", "")
+        project = os.path.basename(cwd) if cwd else "?"
+        print(f"  {DIM}{ts}{RESET}  {event:<15}  {CYAN}{project}{RESET}  {DIM}({sid}){RESET}")
+
+
+def cmd_config():
+    """Show current config."""
+    print_header("CORTEX CONFIGURATION")
+    config = read_json("cortex-config.json")
+    if not config:
+        print("  No config found.")
+        return
+    print(json.dumps(config, indent=2))
+
+
+def cmd_stats():
+    """Quick stats summary."""
+    print_header("CORTEX STATS")
+    learnings = read_jsonl("learnings.jsonl")
+    anti_patterns = read_jsonl("anti-patterns.jsonl")
+    decisions = read_jsonl("decision-journal.jsonl")
+    patterns = read_jsonl("patterns.jsonl")
+    sessions = read_jsonl("session-log.jsonl")
+    config = read_json("cortex-config.json")
+    evolutions = config.get("evolution_stats", {}).get("total_evolutions", 0)
+
+    total_size = sum(file_size_kb(f) for f in TRIM_LIMITS.keys())
+
+    print(f"  Learnings:    {len(learnings)}")
+    print(f"  Anti-patterns:{len(anti_patterns)}")
+    print(f"  Decisions:    {len(decisions)}")
+    print(f"  Patterns:     {len(patterns)}")
+    print(f"  Sessions:     {len(sessions)}")
+    print(f"  Evolutions:   {evolutions}")
+    print(f"  Data size:    {total_size:.1f} KB")
+
+
+def cmd_trim():
+    """Trim data files to safe sizes."""
+    print_header("TRIMMING CORTEX DATA")
+    trimmed_any = False
+
+    for filename, limit in TRIM_LIMITS.items():
+        filepath = DATA_DIR / filename
+        if not filepath.exists():
+            continue
+
+        items = []
+        with open(filepath) as f:
+            lines = f.readlines()
+
+        valid_lines = [l for l in lines if l.strip()]
+        if len(valid_lines) <= limit:
+            print(f"  {GREEN}OK{RESET}  {filename}: {len(valid_lines)} entries (limit: {limit})")
+            continue
+
+        # Keep the last `limit` lines
+        trimmed_lines = valid_lines[-limit:]
+        removed = len(valid_lines) - limit
+        with open(filepath, "w") as f:
+            f.writelines(trimmed_lines)
+        print(f"  {YELLOW}TRIMMED{RESET}  {filename}: removed {removed} old entries, kept {limit}")
+        trimmed_any = True
+
+    if not trimmed_any:
+        print(f"\n  {GREEN}All files within limits. Nothing to trim.{RESET}")
+    else:
+        print(f"\n  {GREEN}Done. Old entries removed.{RESET}")
+
+
+def cmd_export():
+    """Export all intelligence as JSON."""
+    print_header("EXPORTING CORTEX DATA")
+    export = {
+        "exported_at": datetime.utcnow().isoformat() + "Z",
+        "learnings": read_jsonl("learnings.jsonl"),
+        "anti_patterns": read_jsonl("anti-patterns.jsonl"),
+        "decisions": read_jsonl("decision-journal.jsonl"),
+        "patterns": read_jsonl("patterns.jsonl"),
+        "sessions": read_jsonl("session-log.jsonl"),
+        "config": read_json("cortex-config.json"),
+    }
+    export_path = DATA_DIR.parent / "cortex-export.json"
+    with open(export_path, "w") as f:
+        json.dump(export, f, indent=2)
+    print(f"  Exported to: {export_path}")
+    print(f"  Learnings: {len(export['learnings'])}")
+    print(f"  Anti-patterns: {len(export['anti_patterns'])}")
+    print(f"  Decisions: {len(export['decisions'])}")
+    print(f"  Patterns: {len(export['patterns'])}")
+    print(f"  Sessions: {len(export['sessions'])}")
+
+
+# ─────────────────────────────────────────────
+# Main
+# ─────────────────────────────────────────────
+
+COMMANDS = {
+    "health": cmd_health,
+    "learnings": cmd_learnings,
+    "anti-patterns": cmd_anti_patterns,
+    "decisions": cmd_decisions,
+    "patterns": cmd_patterns,
+    "sessions": cmd_sessions,
+    "config": cmd_config,
+    "stats": cmd_stats,
+    "trim": cmd_trim,
+    "export": cmd_export,
+}
+
+
+def main():
+    if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help", "help"):
+        print(__doc__)
+        print(f"  Available commands: {', '.join(COMMANDS.keys())}\n")
+        sys.exit(0)
+
+    cmd = sys.argv[1].lower()
+    if cmd not in COMMANDS:
+        print(f"{RED}Unknown command: {cmd}{RESET}")
+        print(f"Available: {', '.join(COMMANDS.keys())}")
+        sys.exit(1)
+
+    if not DATA_DIR.exists():
+        print(f"{RED}Data directory not found: {DATA_DIR}{RESET}")
+        print("Is the Cortex plugin installed?")
+        sys.exit(1)
+
+    COMMANDS[cmd]()
+
+
+if __name__ == "__main__":
+    main()

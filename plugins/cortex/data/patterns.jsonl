@@ -1,0 +1,7 @@
+{"pattern":"technology_affinity","detail":"Django + HTMX + Tailwind + Alpine.js is the dominant validated stack across Tour2Tech projects","technologies":["django","htmx","tailwind","alpine"],"confidence":"high","timestamp":"2026-04-02T00:00:00Z"}
+{"pattern":"usage_peak","detail":"Peak productivity at 19:00 UTC (00:30 IST). 36 sessions at that hour.","confidence":"high","timestamp":"2026-04-02T00:00:00Z"}
+{"pattern":"model_routing","detail":"Multi-model architecture: Opus for thinking, GPT-5.4 for Haiku tasks, Gemini Pro as option","confidence":"high","timestamp":"2026-04-02T00:00:00Z"}
+{"pattern":"project_fragmentation","detail":"Internal-Tracker exists at 3 paths with 149 combined sessions. Context is fragmented.","confidence":"high","timestamp":"2026-04-02T00:00:00Z"}
+{"pattern":"completion_rate","detail":"40% todo completion rate across 304 tracked items. Front-loaded: Phase 1 completes, Phase 2-3 rarely.","confidence":"high","timestamp":"2026-04-02T00:00:00Z"}
+{"pattern":"testing_deferral","detail":"Testing is nearly always the last todo item and almost never completed.","confidence":"high","timestamp":"2026-04-02T00:00:00Z"}
+{"technologies": ["agent"], "project": "autonomous", "session_id": "5f8d8b27-6040-41ef-8f6c-380045979af6", "timestamp": "2026-04-03T07:10:48.372719+00:00"}

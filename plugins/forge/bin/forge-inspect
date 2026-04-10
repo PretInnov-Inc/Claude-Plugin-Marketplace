@@ -1,0 +1,235 @@
+#!/usr/bin/env python3
+"""forge-inspect — CLI tool for inspecting Plugin Forge state and validating plugin structures."""
+import json
+import os
+import sys
+from pathlib import Path
+from datetime import datetime
+
+# Resolve data directory
+SCRIPT_DIR = Path(__file__).resolve().parent.parent
+DATA_DIR = Path(os.environ.get("CLAUDE_PLUGIN_ROOT", str(SCRIPT_DIR))) / "data"
+
+def read_jsonl(filename, limit=None):
+    path = DATA_DIR / filename
+    if not path.exists():
+        return []
+    entries = []
+    for line in path.read_text().strip().split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+            if not obj.get("_init"):
+                entries.append(obj)
+        except:
+            pass
+    return entries[-limit:] if limit else entries
+
+def read_json(filename):
+    path = DATA_DIR / filename
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text())
+    except:
+        return {}
+
+def cmd_stats():
+    config = read_json("forge-config.json")
+    stats = config.get("build_stats", {})
+    total = stats.get("total_builds", 0)
+    success = stats.get("successful_builds", 0)
+    rate = round(success / max(total, 1) * 100)
+    print(f"  Total builds:     {total}")
+    print(f"  Successful:       {success} ({rate}%)")
+    print(f"  Failed:           {stats.get('failed_builds', 0)}")
+    print(f"  Files generated:  {stats.get('total_files_generated', 0)}")
+    print(f"  Agents created:   {stats.get('total_agents_generated', 0)}")
+    print(f"  Skills created:   {stats.get('total_skills_generated', 0)}")
+    print(f"  Hooks created:    {stats.get('total_hooks_generated', 0)}")
+    print(f"  Last build:       {stats.get('last_build', 'never')}")
+
+def cmd_builds():
+    builds = [b for b in read_jsonl("build-log.jsonl") if b.get("event") == "build_complete"]
+    if not builds:
+        print("  No builds recorded yet.")
+        return
+    for b in builds[-10:]:
+        status = "OK  " if b.get("success") else "FAIL"
+        name = b.get("plugin_name", "?")
+        files = b.get("files_generated", 0)
+        health = b.get("health_score", 0)
+        ts = b.get("timestamp", "")[:10]
+        print(f"  {ts} | {status} | {name:<20} | {files:>3} files | health: {health}/100")
+
+def cmd_learnings():
+    learnings = read_jsonl("learnings.jsonl")
+    if not learnings:
+        print("  No learnings recorded yet.")
+        return
+    for l in learnings[-20:]:
+        cat = l.get("category", "general")
+        src = l.get("source", "?")
+        print(f"  [{cat}] {l.get('learning', '')}")
+        print(f"    Source: {src} | {l.get('timestamp', '')[:10]}")
+
+def cmd_research():
+    findings = read_jsonl("research-cache.jsonl")
+    if not findings:
+        print("  No research cached yet.")
+        return
+    for f in findings[-15:]:
+        rel = f.get("relevance", "?")
+        cat = f.get("category", "?")
+        print(f"  [{rel}|{cat}] {f.get('finding', '')}")
+        if f.get("source"):
+            print(f"    Source: {f['source']}")
+
+def cmd_blueprints():
+    bps = read_jsonl("blueprints.jsonl")
+    if not bps:
+        print("  No blueprints saved yet.")
+        return
+    for bp in bps[-5:]:
+        status = bp.get("status", "?")
+        gen = "generated" if bp.get("generated") else "not generated"
+        comps = bp.get("components", {})
+        print(f"  {bp.get('plugin_name', '?')} | {status} | {gen}")
+        print(f"    Agents: {comps.get('agents', 0)} | Skills: {comps.get('skills', 0)} | Hooks: {comps.get('hooks', 0)}")
+
+def cmd_config():
+    config = read_json("forge-config.json")
+    print(json.dumps(config, indent=2))
+
+def cmd_trim():
+    limits = {
+        "build-log.jsonl": 1000,
+        "research-cache.jsonl": 500,
+        "learnings.jsonl": 200,
+        "blueprints.jsonl": 100,
+        "component-templates.jsonl": 200,
+    }
+    for filename, max_entries in limits.items():
+        path = DATA_DIR / filename
+        if not path.exists():
+            continue
+        lines = [l for l in path.read_text().strip().split("\n") if l.strip()]
+        if len(lines) > max_entries:
+            trimmed = lines[-int(max_entries * 0.8):]
+            path.write_text("\n".join(trimmed) + "\n")
+            print(f"  Trimmed {filename}: {len(lines)} → {len(trimmed)}")
+        else:
+            print(f"  {filename}: {len(lines)}/{max_entries} (OK)")
+
+def cmd_validate(plugin_path):
+    plugin_dir = Path(plugin_path).resolve()
+    issues = []
+
+    # Check manifest
+    manifest = plugin_dir / ".claude-plugin" / "plugin.json"
+    if not manifest.exists():
+        issues.append("[CRITICAL] Missing .claude-plugin/plugin.json")
+    else:
+        try:
+            data = json.loads(manifest.read_text())
+            if "name" not in data:
+                issues.append("[CRITICAL] plugin.json missing 'name' field")
+            if not data.get("name", "").replace("-", "").replace("_", "").isalnum():
+                issues.append("[WARNING] Plugin name should be kebab-case alphanumeric")
+        except json.JSONDecodeError as e:
+            issues.append(f"[CRITICAL] plugin.json is invalid JSON: {e}")
+
+    # Check hooks
+    hooks_file = plugin_dir / "hooks" / "hooks.json"
+    if hooks_file.exists():
+        try:
+            hooks_data = json.loads(hooks_file.read_text())
+            if "hooks" not in hooks_data:
+                issues.append("[WARNING] hooks.json missing top-level 'hooks' key")
+        except json.JSONDecodeError as e:
+            issues.append(f"[CRITICAL] hooks.json is invalid JSON: {e}")
+
+    # Check for components inside .claude-plugin
+    for d in ["commands", "agents", "skills", "hooks", "data"]:
+        if (plugin_dir / ".claude-plugin" / d).exists():
+            issues.append(f"[CRITICAL] '{d}/' found inside .claude-plugin/ — must be at plugin root")
+
+    # Check agents
+    agents_dir = plugin_dir / "agents"
+    if agents_dir.exists():
+        for f in agents_dir.glob("*.md"):
+            content = f.read_text()
+            if not content.strip().startswith("---"):
+                issues.append(f"[WARNING] Agent {f.name} missing YAML frontmatter")
+
+    # Check skills
+    skills_dir = plugin_dir / "skills"
+    if skills_dir.exists():
+        for skill_md in skills_dir.rglob("SKILL.md"):
+            content = skill_md.read_text()
+            if not content.strip().startswith("---"):
+                issues.append(f"[WARNING] {skill_md.relative_to(plugin_dir)} missing YAML frontmatter")
+
+    # Check for hardcoded paths
+    for f in plugin_dir.rglob("*"):
+        if f.is_file() and f.suffix in (".py", ".sh", ".md", ".json"):
+            try:
+                content = f.read_text()
+                if "/Users/" in content or "/home/" in content:
+                    rel = f.relative_to(plugin_dir)
+                    issues.append(f"[WARNING] Hardcoded path in {rel}")
+            except:
+                pass
+
+    if issues:
+        print(f"  Validation FAILED — {len(issues)} issues:")
+        for issue in issues:
+            print(f"    {issue}")
+    else:
+        print("  Validation PASSED — no issues found")
+
+def cmd_help():
+    print("Usage: forge-inspect <command> [args]")
+    print()
+    print("Commands:")
+    print("  stats        Show build statistics")
+    print("  builds       Show recent build history")
+    print("  learnings    Show accumulated learnings")
+    print("  research     Show research cache")
+    print("  blueprints   Show saved blueprints")
+    print("  config       Show current configuration")
+    print("  trim         Trim data files to size limits")
+    print("  validate <path>  Validate a plugin directory")
+    print("  help         Show this help")
+
+def main():
+    if len(sys.argv) < 2:
+        cmd_help()
+        sys.exit(0)
+
+    cmd = sys.argv[1]
+    commands = {
+        "stats": cmd_stats,
+        "builds": cmd_builds,
+        "learnings": cmd_learnings,
+        "research": cmd_research,
+        "blueprints": cmd_blueprints,
+        "config": cmd_config,
+        "trim": cmd_trim,
+        "help": cmd_help,
+    }
+
+    if cmd == "validate":
+        path = sys.argv[2] if len(sys.argv) > 2 else "."
+        cmd_validate(path)
+    elif cmd in commands:
+        commands[cmd]()
+    else:
+        print(f"Unknown command: {cmd}")
+        cmd_help()
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,35 @@
+{
+  "description": "Clamper 4-Tier Intelligence Gradient — maps to Claude Code Router provider config",
+  "Router": {
+    "default": "ollama,qwen2.5-coder:latest",
+    "background": "groq,llama-3.3-70b",
+    "think": "anthropic,claude-sonnet-4-6",
+    "longContext": "anthropic,claude-opus-4-6"
+  },
+  "tiers": {
+    "tier1_deterministic": {
+      "provider": "groq,llama-3.3-70b",
+      "role": "Background tasks, linting, formatting, file operations",
+      "cost": "lowest",
+      "latency": "fastest"
+    },
+    "tier2_field_engineer": {
+      "provider": "ollama,qwen2.5-coder:latest",
+      "role": "Default coding tasks, edits, standard implementations",
+      "cost": "free (local)",
+      "latency": "fast"
+    },
+    "tier3_supervisor": {
+      "provider": "anthropic,claude-sonnet-4-6",
+      "role": "Complex reasoning, architecture decisions, verification review",
+      "cost": "medium",
+      "latency": "moderate"
+    },
+    "tier4_cloud_architect": {
+      "provider": "anthropic,claude-opus-4-6",
+      "role": "Long-context analysis, deep project DNA, strategic planning",
+      "cost": "highest",
+      "latency": "slowest"
+    }
+  }
+}

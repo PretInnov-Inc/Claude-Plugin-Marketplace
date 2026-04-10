@@ -1,0 +1,50 @@
+{
+  "name": "pretinnov-plugins",
+  "owner": {
+    "name": "PretInnov Technologies",
+    "email": "pretinnovofficial@gmail.com"
+  },
+  "metadata": {
+    "description": "Production-grade Claude Code plugins: verification loops, self-learning intelligence, and plugin creation from prompts.",
+    "version": "1.0.0",
+    "pluginRoot": "./plugins"
+  },
+  "plugins": [
+    {
+      "name": "clamper",
+      "source": "clamper",
+      "version": "1.1.0",
+      "description": "Verification loop, deep project DNA extraction, and one-command ecosystem initialization. Clip it, Clamp it.",
+      "author": {
+        "name": "Siddharth Gupta"
+      },
+      "category": "code-quality",
+      "tags": ["verification", "dna", "ecosystem", "hooks", "agents"],
+      "license": "MIT"
+    },
+    {
+      "name": "cortex",
+      "source": "cortex",
+      "version": "1.0.0",
+      "description": "Self-learning intelligence layer that captures learnings, patterns, and decisions across sessions and injects them back automatically.",
+      "author": {
+        "name": "Siddharth Gupta"
+      },
+      "category": "intelligence",
+      "tags": ["learning", "memory", "patterns", "self-evolution", "session-intelligence"],
+      "license": "MIT"
+    },
+    {
+      "name": "forge",
+      "source": "forge",
+      "version": "1.0.0",
+      "description": "Meta-plugin that creates production-grade Claude Code plugins through a 4-phase pipeline: internet research, clarifying questions, architecture blueprint, and full code generation.",
+      "author": {
+        "name": "Siddharth Gupta"
+      },
+      "category": "plugin-development",
+      "tags": ["meta-plugin", "scaffold", "generator", "builder", "plugin-dev"],
+      "license": "MIT"
+    }
+  ]
+}
