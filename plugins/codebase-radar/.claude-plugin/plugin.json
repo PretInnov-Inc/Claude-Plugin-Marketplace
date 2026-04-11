@@ -1,0 +1,47 @@
+{
+  "name": "codebase-radar",
+  "version": "1.0.0",
+  "description": "Hybrid semantic + BM25 codebase search via LanceDB. Auto-indexes on session start, stays current as files change.",
+  "author": { "name": "codebase-radar" },
+  "keywords": ["semantic-search", "vector-search", "lancedb", "codebase-indexing", "hybrid-search", "rag", "code-context"],
+  "license": "MIT",
+  "skills": ["./skills"],
+  "userConfig": {
+    "embedding_model": {
+      "title": "Embedding Model",
+      "description": "HuggingFace model ID (default: all-MiniLM-L6-v2). Set to 'openai' or 'voyageai' for cloud.",
+      "type": "string",
+      "sensitive": false
+    },
+    "openai_api_key": {
+      "title": "OpenAI API Key",
+      "description": "Required only if embedding_model is 'openai'.",
+      "type": "string",
+      "sensitive": true
+    },
+    "voyageai_api_key": {
+      "title": "VoyageAI API Key",
+      "description": "Required only if embedding_model is 'voyageai'.",
+      "type": "string",
+      "sensitive": true
+    },
+    "chunk_size": {
+      "title": "Chunk Size (tokens)",
+      "description": "Max tokens per chunk. Default: 256.",
+      "type": "number",
+      "sensitive": false
+    },
+    "exclusion_patterns": {
+      "title": "Exclusion Patterns",
+      "description": "Comma-separated globs to exclude (e.g. node_modules/**,*.min.js).",
+      "type": "string",
+      "sensitive": false
+    },
+    "top_k": {
+      "title": "Default Top-K Results",
+      "description": "Search results to return. Default: 10.",
+      "type": "number",
+      "sensitive": false
+    }
+  }
+}

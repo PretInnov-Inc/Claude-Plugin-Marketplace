@@ -1,0 +1,42 @@
+{
+  "version": "1.0.0",
+  "embedding": {
+    "provider": "huggingface",
+    "model_id": "all-MiniLM-L6-v2",
+    "dimensions": 384
+  },
+  "chunking": {
+    "chunk_size_tokens": 256,
+    "chunk_overlap_tokens": 32,
+    "ast_enabled": true,
+    "fallback": "character"
+  },
+  "search": {
+    "top_k": 10,
+    "hybrid_alpha": 0.7,
+    "rerank": false
+  },
+  "exclusions": {
+    "patterns": [
+      "node_modules/**",
+      ".git/**",
+      "**/*.min.js",
+      "**/*.lock",
+      "dist/**",
+      "build/**",
+      "__pycache__/**",
+      "*.pyc",
+      "**/*.egg-info/**",
+      ".venv/**",
+      "venv/**"
+    ]
+  },
+  "index_locations": {
+    "lancedb_root": ""
+  },
+  "stats": {
+    "total_sessions": 0,
+    "total_searches": 0,
+    "total_files_indexed": 0
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "hooks": [
+    {
+      "event": "SessionStart",
+      "async": true,
+      "handler": "hooks-handlers/session-start.py",
+      "timeout": 20000
+    },
+    {
+      "event": "PostToolUse",
+      "matcher": "Write|Edit|MultiEdit",
+      "handler": "hooks-handlers/post-tool-reindex.py",
+      "timeout": 10000
+    },
+    {
+      "event": "PreToolUse",
+      "matcher": "Grep|Glob",
+      "handler": "hooks-handlers/pre-tool-suggest.py",
+      "timeout": 5000
+    },
+    {
+      "event": "Stop",
+      "handler": "hooks-handlers/session-stop.py",
+      "timeout": 30000
+    }
+  ]
+}

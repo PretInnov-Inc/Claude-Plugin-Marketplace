@@ -1,0 +1,174 @@
+#!/usr/bin/env python3
+"""
+radar-status — CLI tool to show codebase-radar index status for the current directory.
+
+Usage: radar-status [path]
+"""
+
+import sys
+import os
+import json
+import hashlib
+from pathlib import Path
+from datetime import datetime, timezone
+
+
+def compute_project_hash(path: str) -> str:
+    return hashlib.sha256(path.encode()).hexdigest()[:12]
+
+
+def format_size(mb: float) -> str:
+    if mb is None:
+        return "unknown"
+    if mb < 1.0:
+        return f"{mb * 1024:.1f} KB"
+    return f"{mb:.1f} MB"
+
+
+def format_age(iso_ts: str) -> str:
+    try:
+        dt = datetime.fromisoformat(iso_ts.replace("Z", "+00:00"))
+        delta = datetime.now(timezone.utc) - dt
+        days = delta.days
+        hours = delta.seconds // 3600
+        if days > 0:
+            return f"{days}d {hours}h ago"
+        minutes = delta.seconds // 60
+        if hours > 0:
+            return f"{hours}h {minutes % 60}m ago"
+        return f"{minutes}m ago"
+    except Exception:
+        return iso_ts
+
+
+def get_index_size(lancedb_root: str, table_name: str) -> float | None:
+    table_dir = os.path.join(lancedb_root, table_name + ".lance")
+    if not os.path.isdir(table_dir):
+        return None
+    try:
+        total = sum(
+            os.path.getsize(os.path.join(dp, f))
+            for dp, _, files in os.walk(table_dir)
+            for f in files
+        )
+        return total / (1024 * 1024)
+    except Exception:
+        return None
+
+
+def main():
+    # Determine target path
+    if len(sys.argv) > 1:
+        target_path = os.path.abspath(sys.argv[1])
+    else:
+        target_path = os.getcwd()
+
+    if not os.path.isdir(target_path):
+        print(f"Error: '{target_path}' is not a directory.", file=sys.stderr)
+        sys.exit(1)
+
+    # Locate state file
+    state_path = os.environ.get(
+        "RADAR_STATE_PATH",
+        os.path.expanduser("~/.local/share/claude-plugins/codebase-radar/index-state.json")
+    )
+    lancedb_root = os.environ.get(
+        "RADAR_LANCEDB_ROOT",
+        os.path.expanduser("~/.local/share/claude-plugins/codebase-radar/lancedb")
+    )
+
+    # Read state
+    if not os.path.exists(state_path):
+        print(f"\ncodebase-radar — No index database found.")
+        print(f"State file expected at: {state_path}")
+        print(f"\nRun scripts/install.sh to set up codebase-radar, then:")
+        print(f"  /radar:index {target_path}")
+        sys.exit(0)
+
+    try:
+        with open(state_path, "r") as f:
+            state = json.load(f)
+    except Exception as e:
+        print(f"Error reading state file: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    project_hash = compute_project_hash(target_path)
+    project_entry = state.get("projects", {}).get(project_hash)
+
+    print()
+    print("codebase-radar — Index Status")
+    print("=" * 50)
+    print(f"Project:         {target_path}")
+    print(f"Project Hash:    {project_hash}")
+
+    if not project_entry:
+        print(f"Status:          NOT INDEXED")
+        print("=" * 50)
+        print()
+        print("This directory has not been indexed.")
+        print("To build the semantic search index, run:")
+        print(f"  /radar:index {target_path}")
+        print()
+        sys.exit(0)
+
+    # Extract stats
+    last_indexed_raw = project_entry.get("last_indexed")
+    last_indexed_display = format_age(last_indexed_raw) if last_indexed_raw else "never"
+    files_indexed = project_entry.get("files_indexed", 0)
+    chunks_total = project_entry.get("chunks_total", 0)
+    embedding_model = project_entry.get("embedding_model", "unknown")
+    embedding_provider = project_entry.get("embedding_provider", "unknown")
+    index_status = project_entry.get("status", "complete")
+    table_name = project_entry.get("table_name", f"radar_{project_hash}")
+
+    index_size_mb = get_index_size(lancedb_root, table_name)
+
+    # Compute health
+    health = "OK"
+    health_notes = []
+    if index_status == "indexing":
+        health = "WARNING"
+        health_notes.append("indexing in progress")
+    elif files_indexed == 0:
+        health = "ERROR"
+        health_notes.append("no files indexed")
+    elif chunks_total == 0:
+        health = "WARNING"
+        health_notes.append("no chunks in index")
+    elif last_indexed_raw:
+        try:
+            dt = datetime.fromisoformat(last_indexed_raw.replace("Z", "+00:00"))
+            age_days = (datetime.now(timezone.utc) - dt).days
+            if age_days > 7:
+                health = "WARNING"
+                health_notes.append(f"index is {age_days} days old")
+        except Exception:
+            pass
+
+    health_str = health
+    if health_notes:
+        health_str += f" ({', '.join(health_notes)})"
+
+    print(f"Status:          {index_status.upper()}")
+    print(f"Files Indexed:   {files_indexed:,}")
+    print(f"Total Chunks:    {chunks_total:,}")
+    print(f"Last Indexed:    {last_indexed_display}  ({last_indexed_raw or 'unknown'})")
+    print(f"Embedding Model: {embedding_model}")
+    print(f"Provider:        {embedding_provider}")
+    print(f"Index Size:      {format_size(index_size_mb)}")
+    print(f"Health:          {health_str}")
+    print("=" * 50)
+    print()
+
+    if health == "OK":
+        print("Use /radar:search <query> for semantic code search.")
+    elif health == "WARNING":
+        print("Consider refreshing the index: /radar:index")
+    else:
+        print("Index needs attention. Run: /radar:index")
+
+    print()
+
+
+if __name__ == "__main__":
+    main()

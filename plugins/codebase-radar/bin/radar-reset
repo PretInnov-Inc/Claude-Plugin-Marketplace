@@ -1,0 +1,140 @@
+#!/usr/bin/env python3
+"""
+radar-reset — CLI tool to clear the codebase-radar index for a project directory.
+
+Usage: radar-reset [--path <directory>]
+
+WARNING: This operation cannot be undone.
+"""
+
+import sys
+import os
+import json
+import hashlib
+import shutil
+import argparse
+from pathlib import Path
+
+
+def compute_project_hash(path: str) -> str:
+    return hashlib.sha256(path.encode()).hexdigest()[:12]
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Reset the codebase-radar semantic index for a project directory."
+    )
+    parser.add_argument(
+        "--path",
+        type=str,
+        default=None,
+        help="Path to the project directory (default: current working directory)"
+    )
+    args = parser.parse_args()
+
+    target_path = os.path.abspath(args.path) if args.path else os.getcwd()
+
+    if not os.path.isdir(target_path):
+        print(f"Error: '{target_path}' is not a directory.", file=sys.stderr)
+        sys.exit(1)
+
+    # Locate state and lancedb
+    state_path = os.environ.get(
+        "RADAR_STATE_PATH",
+        os.path.expanduser("~/.local/share/claude-plugins/codebase-radar/index-state.json")
+    )
+    lancedb_root = os.environ.get(
+        "RADAR_LANCEDB_ROOT",
+        os.path.expanduser("~/.local/share/claude-plugins/codebase-radar/lancedb")
+    )
+
+    project_hash = compute_project_hash(target_path)
+
+    # Read state
+    if not os.path.exists(state_path):
+        print(f"No index state found at '{state_path}'.")
+        print("Nothing to reset.")
+        sys.exit(0)
+
+    try:
+        with open(state_path, "r") as f:
+            state = json.load(f)
+    except Exception as e:
+        print(f"Error reading state file: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    project_entry = state.get("projects", {}).get(project_hash)
+
+    if not project_entry:
+        print(f"No index found for '{target_path}'.")
+        print("Nothing to reset.")
+        sys.exit(0)
+
+    files_indexed = project_entry.get("files_indexed", 0)
+    chunks_total = project_entry.get("chunks_total", 0)
+    table_name = project_entry.get("table_name", f"radar_{project_hash}")
+
+    print()
+    print(f"codebase-radar Reset")
+    print("=" * 50)
+    print(f"Project:       {target_path}")
+    print(f"Project Hash:  {project_hash}")
+    print(f"Files Indexed: {files_indexed:,}")
+    print(f"Chunks:        {chunks_total:,}")
+    print(f"Table:         {table_name}")
+    print("=" * 50)
+    print()
+
+    # Prompt for confirmation
+    try:
+        answer = input(f"Reset index for '{target_path}'? This cannot be undone. [y/N]: ").strip()
+    except (EOFError, KeyboardInterrupt):
+        print("\nAborted.")
+        sys.exit(0)
+
+    if answer.lower() != "y":
+        print("Reset cancelled.")
+        sys.exit(0)
+
+    print()
+    errors = []
+
+    # Remove LanceDB table directory
+    table_dir = os.path.join(lancedb_root, table_name + ".lance")
+    if os.path.isdir(table_dir):
+        try:
+            shutil.rmtree(table_dir)
+            print(f"Removed LanceDB table directory: {table_dir}")
+        except Exception as e:
+            errors.append(f"Failed to remove table directory: {e}")
+            print(f"Warning: Could not remove '{table_dir}': {e}")
+    else:
+        print(f"LanceDB table directory not found (already removed?): {table_dir}")
+
+    # Remove project from state
+    state.get("projects", {}).pop(project_hash, None)
+    try:
+        with open(state_path, "w") as f:
+            json.dump(state, f, indent=2)
+        print(f"Removed project entry from index-state.json")
+    except Exception as e:
+        errors.append(f"Failed to update state file: {e}")
+        print(f"Warning: Could not update state file: {e}")
+
+    print()
+    if errors:
+        print(f"Reset completed with {len(errors)} warning(s).")
+        for err in errors:
+            print(f"  - {err}")
+    else:
+        print("Reset complete. The index has been cleared.")
+        print()
+        print("To rebuild the index, run:")
+        print(f"  /radar:index {target_path}")
+        print("  or: radar-status to verify")
+
+    print()
+
+
+if __name__ == "__main__":
+    main()
