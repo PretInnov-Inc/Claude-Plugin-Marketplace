@@ -117,11 +117,42 @@ def _default_config() -> dict:
             "rerank": False
         },
         "exclusions": {
+            # Gitignore-style: bare names are directory names (matched at any
+            # depth); *.ext are file basename globs. See mcp/indexer.py
+            # DEFAULT_EXCLUSION_PATTERNS for the authoritative list.
             "patterns": [
-                "node_modules/**", ".git/**", "**/*.min.js", "**/*.lock",
-                "dist/**", "build/**", "__pycache__/**", "*.pyc",
-                "**/*.egg-info/**", ".venv/**", "venv/**"
-            ]
+                "node_modules", "bower_components", "vendor", "Pods",
+                ".git", ".svn", ".hg",
+                "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache",
+                ".tox", ".venv", "venv", "env", ".eggs",
+                "dist", "build", "out", ".next", ".nuxt", ".svelte-kit",
+                ".astro", ".cache", ".parcel-cache", ".turbo", ".vite", ".yarn",
+                "target", "bin", "obj", ".gradle",
+                ".idea", ".vscode", ".vs",
+                ".claude", ".cursor", ".aider", ".continue", ".zed",
+                ".copilot", ".sourcegraph", ".codeium", ".tabnine",
+                "site-packages", ".ipynb_checkpoints",
+                "coverage", ".nyc_output", "htmlcov",
+                "lancedb", ".lancedb",
+                "*.min.js", "*.min.css", "*.map", "*.bundle.js", "*.chunk.js",
+                "*.lock", "*-lock.json",
+                "package-lock.json", "yarn.lock", "pnpm-lock.yaml",
+                "*.pyc", "*.pyo", "*.class", "*.jar",
+                "*.so", "*.dylib", "*.dll", "*.exe", "*.o", "*.a", "*.wasm",
+                "*.png", "*.jpg", "*.jpeg", "*.gif", "*.webp", "*.ico", "*.svg", "*.avif",
+                "*.mp4", "*.webm", "*.mov", "*.mp3", "*.wav", "*.ogg",
+                "*.pdf", "*.zip", "*.tar", "*.gz", "*.7z",
+                "*.whl", "*.nupkg", "*.deb", "*.rpm", "*.dmg", "*.pkg", "*.msi", "*.apk",
+                "*.woff", "*.woff2", "*.ttf", "*.otf", "*.eot",
+                "*.bcmap", "*.pfb", "*.pfm",
+                "*.parquet", "*.pkl", "*.h5", "*.npy",
+                "*.db", "*.sqlite", "*.lance",
+                "*.log", "*.swp", "*.bak", "*.tmp", ".DS_Store",
+            ],
+        },
+        "file_limits": {
+            "max_file_size_bytes": 1_000_000,
+            "max_line_count": 10_000,
         },
         "index_locations": {
             "lancedb_root": ""

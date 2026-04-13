@@ -27,14 +27,53 @@ def compute_file_hash(file_path: str) -> str:
         return ""
 
 
-def matches_exclusion(rel_path: str, patterns: list) -> bool:
-    """Check if a relative path matches any exclusion glob pattern."""
-    for pattern in patterns:
-        if fnmatch.fnmatch(rel_path, pattern):
+# ─── gitignore-style exclusion matcher (mirrors mcp/indexer.py) ───
+#
+# MUST stay behavior-compatible with indexer._matches_exclusion or the
+# hook's filesystem diff will count different files than the indexer does.
+def compile_exclusions(patterns):
+    """Classify patterns into (dir_names, file_globs, path_globs)."""
+    dir_names = set()
+    file_globs = []
+    path_globs = []
+    for raw in patterns or []:
+        pat = (raw or "").strip()
+        if not pat:
+            continue
+        stripped = pat
+        for suffix in ("/**/*", "/**", "/"):
+            if stripped.endswith(suffix):
+                stripped = stripped[: -len(suffix)]
+                break
+        if stripped and "/" not in stripped and "*" not in stripped and "?" not in stripped:
+            dir_names.add(stripped)
+            continue
+        if pat.startswith("**/"):
+            rest = pat[3:]
+            if "/" not in rest:
+                file_globs.append(rest)
+                continue
+        if "/" not in pat:
+            file_globs.append(pat)
+            continue
+        path_globs.append(pat)
+    return dir_names, file_globs, path_globs
+
+
+def matches_exclusion(rel_path, compiled):
+    """Return True if rel_path is excluded by the compiled triple."""
+    dir_names, file_globs, path_globs = compiled
+    rp = rel_path.replace("\\", "/")
+    parts = rp.split("/")
+    for part in parts:
+        if part in dir_names:
             return True
-        # Also check if any path component matches
-        parts = rel_path.replace("\\", "/")
-        if fnmatch.fnmatch(parts, pattern):
+    basename = parts[-1] if parts else rp
+    for pat in file_globs:
+        if fnmatch.fnmatch(basename, pat):
+            return True
+    for pat in path_globs:
+        if fnmatch.fnmatch(rp, pat):
             return True
     return False
 
@@ -129,20 +168,50 @@ def main():
     projects = state.get("projects", {})
     project_entry = projects.get(project_hash)
 
-    # Read config for exclusion patterns
+    # Read config for exclusion patterns. Fall back to a comprehensive
+    # default list (kept in sync with mcp/indexer.py DEFAULT_EXCLUSION_PATTERNS)
+    # so hook-side filesystem counts match the indexer's effective scope.
     config_path = os.path.join(plugin_data, "config.json")
     exclusion_patterns = [
-        "node_modules/**", ".git/**", "**/*.min.js", "**/*.lock",
-        "dist/**", "build/**", "__pycache__/**", "*.pyc",
-        "**/*.egg-info/**", ".venv/**", "venv/**"
+        # Dependency / vcs / caches / build outputs (bare names → any depth)
+        "node_modules", "bower_components", "vendor", "Pods",
+        ".git", ".svn", ".hg",
+        "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".tox", ".nox",
+        ".venv", "venv", "env", ".eggs",
+        "dist", "build", "out", ".next", ".nuxt", ".svelte-kit", ".astro",
+        ".cache", ".parcel-cache", ".turbo", ".vite", ".yarn",
+        "target", "bin", "obj", ".gradle",
+        ".idea", ".vscode", ".vs",
+        ".claude", ".cursor", ".aider", ".continue", ".zed", ".copilot",
+        ".sourcegraph", ".codeium", ".tabnine",
+        "site-packages", ".ipynb_checkpoints",
+        "coverage", ".nyc_output", "htmlcov",
+        "lancedb", ".lancedb",
+        # File globs
+        "*.min.js", "*.min.css", "*.map", "*.bundle.js", "*.chunk.js",
+        "*.lock", "*-lock.json", "package-lock.json", "yarn.lock", "pnpm-lock.yaml",
+        "*.pyc", "*.pyo", "*.class", "*.jar", "*.so", "*.dylib", "*.dll",
+        "*.exe", "*.o", "*.a", "*.wasm",
+        "*.png", "*.jpg", "*.jpeg", "*.gif", "*.webp", "*.ico", "*.svg", "*.avif",
+        "*.mp4", "*.webm", "*.mov", "*.mp3", "*.wav", "*.ogg",
+        "*.pdf", "*.zip", "*.tar", "*.gz", "*.7z",
+        "*.whl", "*.nupkg", "*.deb", "*.rpm", "*.dmg", "*.pkg", "*.msi", "*.apk",
+        "*.woff", "*.woff2", "*.ttf", "*.otf", "*.eot", "*.bcmap", "*.pfb", "*.pfm",
+        "*.parquet", "*.pkl", "*.h5", "*.npy", "*.db", "*.sqlite", "*.lance",
+        "*.log", "*.swp", "*.bak", "*.tmp", ".DS_Store",
     ]
     try:
         if os.path.exists(config_path):
             with open(config_path, "r") as f:
                 config = json.load(f)
-            exclusion_patterns = config.get("exclusions", {}).get("patterns", exclusion_patterns)
+            exclusion_patterns = (
+                config.get("exclusions", {}).get("patterns")
+                or exclusion_patterns
+            )
     except Exception:
         pass
+
+    compiled_exclusions = compile_exclusions(exclusion_patterns)
 
     # --- Case 1: Project not indexed at all ---
     if not project_entry:
@@ -177,19 +246,23 @@ def main():
 
     try:
         for root, dirs, files in os.walk(cwd):
-            # Prune excluded directories in-place
-            dirs[:] = [
-                d for d in dirs
-                if not matches_exclusion(
-                    os.path.relpath(os.path.join(root, d), cwd),
-                    exclusion_patterns
-                )
-            ]
+            # Prune excluded directories in-place. Cheap set lookup first;
+            # full matcher only for patterns that aren't bare dir names.
+            pruned = []
+            for d in dirs:
+                if d in compiled_exclusions[0]:
+                    continue
+                d_rel = os.path.relpath(os.path.join(root, d), cwd)
+                if matches_exclusion(d_rel, compiled_exclusions):
+                    continue
+                pruned.append(d)
+            dirs[:] = pruned
+
             for fname in files:
                 abs_path = os.path.join(root, fname)
                 rel_path = os.path.relpath(abs_path, cwd)
 
-                if matches_exclusion(rel_path, exclusion_patterns):
+                if matches_exclusion(rel_path, compiled_exclusions):
                     continue
 
                 current_files.add(rel_path)

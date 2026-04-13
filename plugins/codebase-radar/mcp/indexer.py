@@ -90,23 +90,200 @@ def _file_hash(file_path: str) -> str:
     h = hashlib.sha256()
     try:
         with open(file_path, "rb") as f:
-            h.update(f.read(8192))
+            h.update(f.read(BINARY_SNIFF_BYTES))
         return h.hexdigest()
     except Exception:
         return ""
+
+
+def _read_head_and_hash(abs_path: str):
+    """
+    One-pass read of the first 8 KB for both the hash and binary sniff.
+    Returns (hash_hex, head_bytes, size) or (None, None, None) on error.
+    """
+    try:
+        size = os.path.getsize(abs_path)
+    except OSError:
+        return None, None, None
+    try:
+        with open(abs_path, "rb") as f:
+            head = f.read(BINARY_SNIFF_BYTES)
+    except Exception:
+        return None, None, None
+    h = hashlib.sha256()
+    h.update(head)
+    return h.hexdigest(), head, size
 
 
 def _chunk_id(file_path: str, start_line: int) -> str:
     return hashlib.sha256(f"{file_path}:{start_line}".encode()).hexdigest()[:16]
 
 
-def _matches_exclusion(rel_path: str, patterns: list) -> bool:
-    for pattern in patterns:
-        if fnmatch.fnmatch(rel_path, pattern):
+#
+# Exclusion / file-filter machinery.
+#
+# Previous implementation used fnmatch with patterns like "node_modules/**".
+# fnmatch does NOT support globstar — `**` is treated identically to `*` and
+# matches anything except `/`. So "node_modules/**" only caught top-level
+# node_modules/; nested occurrences (any/depth/node_modules/foo) were walked,
+# explaining why a 2.4 GB tree of plugin sources produced 34k+ files to index.
+#
+# New algorithm is gitignore-style path-component matching:
+#   * A bare name with no slash and no glob chars (e.g. "node_modules", ".git")
+#     is a DIRECTORY NAME and matches any path component of that name anywhere.
+#   * A pattern with a glob but no slash (e.g. "*.min.js", "*.png") is a
+#     FILE-BASENAME GLOB and matches the leaf filename only.
+#   * A pattern ending in "/**" or "/" is also treated as a directory name
+#     (stripped of the suffix) for backward compat with the old config shape.
+#   * Anything else is a FULL PATH GLOB against the relative path.
+
+DEFAULT_EXCLUSION_PATTERNS = [
+    # Dependency & package directories
+    "node_modules", "bower_components", "jspm_packages", "vendor", "Pods",
+    # VCS
+    ".git", ".svn", ".hg", ".bzr",
+    # Python caches & envs
+    "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".tox", ".nox",
+    ".venv", "venv", "env", "virtualenv", ".eggs",
+    # JS/TS build outputs & caches
+    "dist", "build", "out", ".next", ".nuxt", ".svelte-kit", ".astro",
+    ".docusaurus", ".cache", ".parcel-cache", ".turbo", ".vite", ".yarn",
+    # JVM / .NET / Rust / Go build outputs
+    "target", "bin", "obj", ".gradle", ".m2",
+    # Editor / IDE / AI tooling data dirs (NOT project source — huge caches)
+    ".idea", ".vscode", ".vs", ".history",
+    ".claude", ".cursor", ".aider", ".continue", ".zed", ".copilot",
+    ".sourcegraph", ".codeium", ".tabnine",
+    # Coverage / test output
+    "coverage", ".nyc_output", "htmlcov", ".coverage",
+    # Infra / IaC
+    ".terraform", ".serverless",
+    # Python site-packages anywhere in the tree (installed deps, type stubs)
+    "site-packages", ".ipynb_checkpoints",
+    # Vector DB / radar's own artifacts — never recursively index your index
+    "lancedb", ".lancedb",
+    # OS / misc
+    ".DS_Store",
+
+    # File basename patterns: minified, source maps, bundles
+    "*.min.js", "*.min.css", "*.min.map",
+    "*.map", "*.bundle.js", "*.chunk.js", "*.hot-update.js", "*.d.ts.map",
+    # Lock files
+    "*.lock", "*-lock.json", "*.lockb",
+    "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "poetry.lock",
+    "Cargo.lock", "Gemfile.lock", "composer.lock", "Pipfile.lock",
+    # Compiled / binary artifacts
+    "*.pyc", "*.pyo", "*.pyd",
+    "*.class", "*.jar", "*.war", "*.ear",
+    "*.so", "*.dylib", "*.dll", "*.exe",
+    "*.o", "*.a", "*.obj", "*.lib",
+    "*.wasm",
+    # Images
+    "*.png", "*.jpg", "*.jpeg", "*.gif", "*.bmp", "*.tiff", "*.tif",
+    "*.webp", "*.ico", "*.svg", "*.avif", "*.heic",
+    # Video
+    "*.mp4", "*.webm", "*.mov", "*.avi", "*.mkv", "*.flv", "*.m4v",
+    # Audio
+    "*.mp3", "*.wav", "*.ogg", "*.flac", "*.m4a", "*.aac",
+    # Docs / archives
+    "*.pdf", "*.doc", "*.docx", "*.ppt", "*.pptx", "*.xls", "*.xlsx",
+    "*.zip", "*.tar", "*.tar.gz", "*.tgz", "*.gz", "*.bz2", "*.xz", "*.7z", "*.rar",
+    # Packages / installers
+    "*.whl", "*.nupkg", "*.deb", "*.rpm", "*.dmg", "*.pkg", "*.msi", "*.apk",
+    # Fonts (incl. PDF.js binary font maps)
+    "*.woff", "*.woff2", "*.ttf", "*.otf", "*.eot", "*.bcmap", "*.pfb", "*.pfm",
+    # Serialized data / ML artifacts (not source)
+    "*.parquet", "*.arrow", "*.feather", "*.avro", "*.orc",
+    "*.pkl", "*.h5", "*.hdf5", "*.npy", "*.npz",
+    "*.db", "*.sqlite", "*.sqlite3",
+    "*.lance",
+    # Logs / temp / editor backups
+    "*.log", "*.pid", "*.swp", "*.swo", "*.bak", "*.tmp", "*~",
+]
+
+# File-level guards. Any of these will skip the file without reading its
+# full contents — critical for avoiding OOM on huge generated blobs that
+# slip past extension-based exclusions.
+DEFAULT_MAX_FILE_SIZE_BYTES = 1_000_000
+DEFAULT_MAX_LINE_COUNT = 10_000
+BINARY_SNIFF_BYTES = 8192
+
+
+def _compile_exclusions(patterns: list):
+    """Classify patterns into (dir_names, file_globs, path_globs)."""
+    dir_names: set = set()
+    file_globs: list = []
+    path_globs: list = []
+    for raw in patterns or []:
+        pat = (raw or "").strip()
+        if not pat:
+            continue
+        # Back-compat: "foo/**", "foo/", "foo/**/*" → directory name "foo"
+        stripped = pat
+        for suffix in ("/**/*", "/**", "/"):
+            if stripped.endswith(suffix):
+                stripped = stripped[: -len(suffix)]
+                break
+        # Bare name with no glob chars → dir-name match anywhere
+        if stripped and "/" not in stripped and "*" not in stripped and "?" not in stripped:
+            dir_names.add(stripped)
+            continue
+        # "**/*.ext" → treat tail as basename glob
+        if pat.startswith("**/"):
+            rest = pat[3:]
+            if "/" not in rest:
+                file_globs.append(rest)
+                continue
+        # No slash + has glob → basename glob
+        if "/" not in pat:
+            file_globs.append(pat)
+            continue
+        path_globs.append(pat)
+    return dir_names, file_globs, path_globs
+
+
+def _matches_exclusion(rel_path: str, compiled) -> bool:
+    """Return True if rel_path is excluded by the compiled triple."""
+    dir_names, file_globs, path_globs = compiled
+    rp = rel_path.replace("\\", "/")
+    parts = rp.split("/")
+    for part in parts:
+        if part in dir_names:
             return True
-        if fnmatch.fnmatch(rel_path.replace("\\", "/"), pattern):
+    basename = parts[-1] if parts else rp
+    for pat in file_globs:
+        if fnmatch.fnmatch(basename, pat):
+            return True
+    for pat in path_globs:
+        if fnmatch.fnmatch(rp, pat):
             return True
     return False
+
+
+def _file_filter_reason(abs_path: str, size: int, head_bytes: bytes,
+                        max_size: int, max_lines: int):
+    """
+    Returns a short reason string if this file should be skipped at the
+    file level (not path-pattern level), or None to proceed.
+
+    Callers pass `size` and `head_bytes` already-read (during file hashing)
+    to avoid reopening the file twice.
+    """
+    if size > max_size:
+        return f"size>{max_size}B"
+    if b"\x00" in head_bytes:
+        return "binary"
+    if size > 200_000:
+        try:
+            with open(abs_path, "rb") as f:
+                n = 0
+                for _ in f:
+                    n += 1
+                    if n > max_lines:
+                        return f"lines>{max_lines}"
+        except Exception:
+            return "unreadable"
+    return None
 
 
 def _open_or_create_table(db: lancedb.LanceDBConnection, table_name: str) -> lancedb.table.Table:
@@ -227,11 +404,16 @@ def index_codebase(path: str, incremental: bool = True, force_full: bool = False
 def _index_codebase_impl(project_root: str, ph: str, incremental: bool,
                          force_full: bool, start_time: float) -> dict:
     config = _load_config()
-    exclusion_patterns = config.get("exclusions", {}).get("patterns", [
-        "node_modules/**", ".git/**", "**/*.min.js", "**/*.lock",
-        "dist/**", "build/**", "__pycache__/**", "*.pyc",
-        "**/*.egg-info/**", ".venv/**", "venv/**"
-    ])
+    exclusion_patterns = (
+        config.get("exclusions", {}).get("patterns")
+        or DEFAULT_EXCLUSION_PATTERNS
+    )
+    compiled_exclusions = _compile_exclusions(exclusion_patterns)
+
+    # File-level guards (configurable, with safe defaults)
+    file_limits = config.get("file_limits", {}) or {}
+    max_size = int(file_limits.get("max_file_size_bytes", DEFAULT_MAX_FILE_SIZE_BYTES))
+    max_lines = int(file_limits.get("max_line_count", DEFAULT_MAX_LINE_COUNT))
 
     state = _read_state()
     project_entry = state.get("projects", {}).get(ph, {})
@@ -252,28 +434,56 @@ def _index_codebase_impl(project_root: str, ph: str, incremental: bool,
     table = _open_or_create_table(db, table_name)
 
     # Walk filesystem
-    files_to_process = []
+    files_to_process = []       # (abs_path, rel_path, current_hash)
     all_rel_paths = set()
+    skipped_stats = {"excluded_dir": 0, "excluded_file": 0, "too_large": 0,
+                     "binary": 0, "too_many_lines": 0, "unreadable": 0}
 
     for root, dirs, files in os.walk(project_root):
-        dirs[:] = [
-            d for d in dirs
-            if not _matches_exclusion(
-                os.path.relpath(os.path.join(root, d), project_root),
-                exclusion_patterns
-            )
-        ]
+        # Prune excluded dirs in-place; `d in dir_names` is O(1) set lookup.
+        pruned = []
+        for d in dirs:
+            # The common case — bare directory name match — avoids the full
+            # rel-path check entirely.
+            if d in compiled_exclusions[0]:
+                skipped_stats["excluded_dir"] += 1
+                continue
+            d_rel = os.path.relpath(os.path.join(root, d), project_root)
+            if _matches_exclusion(d_rel, compiled_exclusions):
+                skipped_stats["excluded_dir"] += 1
+                continue
+            pruned.append(d)
+        dirs[:] = pruned
+
         for fname in files:
             abs_path = os.path.join(root, fname)
             rel_path = os.path.relpath(abs_path, project_root)
 
-            if _matches_exclusion(rel_path, exclusion_patterns):
+            if _matches_exclusion(rel_path, compiled_exclusions):
+                skipped_stats["excluded_file"] += 1
+                continue
+
+            # Single-pass head read: get hash + size + binary-sniff bytes.
+            current_hash, head, size = _read_head_and_hash(abs_path)
+            if current_hash is None:
+                skipped_stats["unreadable"] += 1
+                continue
+
+            # File-level guards: catch giant or binary files that slipped
+            # past path patterns (e.g. unknown-extension blobs).
+            reason = _file_filter_reason(abs_path, size, head, max_size, max_lines)
+            if reason:
+                if reason.startswith("size>"):
+                    skipped_stats["too_large"] += 1
+                elif reason == "binary":
+                    skipped_stats["binary"] += 1
+                elif reason.startswith("lines>"):
+                    skipped_stats["too_many_lines"] += 1
+                else:
+                    skipped_stats["unreadable"] += 1
                 continue
 
             all_rel_paths.add(rel_path)
-            current_hash = _file_hash(abs_path)
-            if not current_hash:
-                continue
 
             if not incremental or force_full:
                 files_to_process.append((abs_path, rel_path, current_hash))
@@ -414,6 +624,7 @@ def _index_codebase_impl(project_root: str, ph: str, incremental: bool,
         },
         "job": None,
         "error": None,
+        "skipped": skipped_stats,
     }
     _write_state(state)
 
@@ -426,7 +637,8 @@ def _index_codebase_impl(project_root: str, ph: str, incremental: bool,
         "chunks_total": total_chunks_in_table,
         "duration_seconds": round(duration, 2),
         "embedding_model": provider_info["model_id"],
-        "last_indexed": now
+        "last_indexed": now,
+        "skipped": skipped_stats,
     }
 
 
@@ -455,6 +667,29 @@ def reindex_file(file_path: str) -> dict:
         project_root = os.getcwd()
         project_hash = _project_hash(project_root)
 
+    # File-level guards: a post-edit monster file shouldn't be re-embedded.
+    config = _load_config()
+    file_limits = config.get("file_limits", {}) or {}
+    max_size = int(file_limits.get("max_file_size_bytes", DEFAULT_MAX_FILE_SIZE_BYTES))
+    max_lines = int(file_limits.get("max_line_count", DEFAULT_MAX_LINE_COUNT))
+    _, head, size = _read_head_and_hash(abs_path)
+    if head is not None:
+        skip_reason = _file_filter_reason(abs_path, size, head, max_size, max_lines)
+        if skip_reason:
+            # Treat as "file deleted from index scope": drop its chunks, clear
+            # its state entry, and return the reason so callers know why.
+            db = lancedb.connect(_get_lancedb_root())
+            table = _open_or_create_table(db, _table_name(project_root))
+            try:
+                safe_fp = abs_path.replace("'", "\\'")
+                table.delete(f"file_path = '{safe_fp}'")
+            except Exception:
+                pass
+            _update_file_state(state, project_hash, project_root,
+                               os.path.relpath(abs_path, project_root), "")
+            _write_state(state)
+            return {"status": "skipped", "file": abs_path, "reason": skip_reason}
+
     db = lancedb.connect(_get_lancedb_root())
     table_name = _table_name(project_root)
 
@@ -477,15 +712,17 @@ def reindex_file(file_path: str) -> dict:
         _write_state(state)
         return {"status": "complete", "file": abs_path, "chunks_added": 0}
 
-    # Embed
-    texts = [c["text"] for c in chunks]
-    vectors = embed_texts(texts)
+    # Embed in sub-batches (same streaming shape as the main indexer) to
+    # cap memory in case of a huge edited file.
     rel_path = os.path.relpath(abs_path, project_root)
-
+    batch_size = 32
     records = []
-    for chunk, vec in zip(chunks, vectors):
-        cid = _chunk_id(abs_path, chunk["start_line"])
-        records.append({
+    for i in range(0, len(chunks), batch_size):
+        sub = chunks[i:i + batch_size]
+        vectors = embed_texts([c["text"] for c in sub])
+        for chunk, vec in zip(sub, vectors):
+            cid = _chunk_id(abs_path, chunk["start_line"])
+            records.append({
             "chunk_id": cid,
             "file_path": abs_path,
             "relative_path": rel_path,
