@@ -2,13 +2,15 @@
 name: ai-forge
 version: 2.0.0
 description: >-
-  AI Development Toolkit. Use when the user wants to build Claude plugins, skills, agents,
-  MCP servers, hook handlers, or Agent SDK apps. Consolidates forge, plugin-dev, agent-sdk-dev,
-  skill-creator, mcp-builder, atomic-agents into one research → blueprint → build → validate pipeline.
+  Use when: user wants to build Claude plugins, skills, agents, MCP servers, hook handlers, or Agent SDK apps.
   Triggers on: "build a plugin", "create an agent", "make a skill", "build an MCP server",
   "create a hook", "design an agent system", "build with agent SDK", "atomic agent".
-argument-hint: "[what to build] [description]"
+  DO NOT trigger for: reviewing existing plugins (→ sentinel/ai-validator), editing individual hook files
+  without a full build (do inline), explaining plugin architecture (explain inline).
+  CRITICAL: Never skip Research → Blueprint → Build → Validate. Blueprint must be approved before building.
+argument-hint: "[plugin|agent|skill|hook|mcp|sdk|blueprint|validate] [description]"
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash, WebFetch, WebSearch, TodoWrite, Agent
+execution_mode: sequential
 ---
 
 # Sentinel AI Forge — AI Development Toolkit

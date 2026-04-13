@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Sentinel Plugin v2.1 — Install & Full Validation Script
-# Validates all 52 components: 21 agents, 9 skills, 6 hook handlers,
-# 3 output styles, 2 commands, 6 data files, 3 config files, 1 manifest.
+# Sentinel Plugin v3.0 — Install & Full Validation Script
+# Validates all 68 components: 24 agents, 11 skills, 9 hook handlers,
+# 3 output styles, 2 commands, 6 data files, 3 config files, 1 manifest,
+# 6 CLI tools, 2 data templates, 3 new bin utilities.
 
 set -euo pipefail
 
@@ -10,7 +11,7 @@ PLUGIN_ROOT="$(dirname "$SCRIPT_DIR")"
 ERRORS=0
 
 echo "═══════════════════════════════════════════════════"
-echo "  Sentinel v2.1 — Plugin Installation & Validation"
+echo "  Sentinel v3.0 — Plugin Installation & Validation"
 echo "═══════════════════════════════════════════════════"
 echo "Plugin root: $PLUGIN_ROOT"
 echo ""
@@ -46,8 +47,8 @@ for dir in agents commands skills hooks hooks-handlers data output-styles script
 done
 echo ""
 
-# ─── Agents (21) ─────────────────────────────────────────────────────────────
-echo "▸ Agents (21)"
+# ─── Agents (24) ─────────────────────────────────────────────────────────────
+echo "▸ Agents (24)"
 for agent in \
     sentinel-reviewer bug-hunter error-auditor security-scanner test-analyzer code-polisher \
     ai-architect ai-builder ai-validator \
@@ -57,14 +58,15 @@ for agent in \
     ui-architect style-writer \
     doc-writer content-strategist \
     pipeline-builder data-profiler \
-    workspace-curator; do
+    workspace-curator \
+    design-auditor sentinel-auditor risk-gatekeeper; do
     check_file "agents/${agent}.md"
 done
 echo ""
 
-# ─── Skills (9) ──────────────────────────────────────────────────────────────
-echo "▸ Skills (9)"
-for skill in sentinel ai-forge style-engine browser-pilot flow-memory design-craft doc-engine infra-ops dx-meta; do
+# ─── Skills (11) ─────────────────────────────────────────────────────────────
+echo "▸ Skills (11)"
+for skill in sentinel ai-forge style-engine browser-pilot flow-memory design-craft doc-engine infra-ops dx-meta sentinel-doctor sentinel-audit; do
     check_file "skills/${skill}/SKILL.md"
 done
 echo ""
@@ -75,14 +77,17 @@ check_file "commands/review.md"
 check_file "commands/quick-check.md"
 echo ""
 
-# ─── Hook Handlers (6) ───────────────────────────────────────────────────────
-echo "▸ Hook Handlers"
+# ─── Hook Handlers (9) ───────────────────────────────────────────────────────
+echo "▸ Hook Handlers (9)"
 check_file "hooks-handlers/pre-edit-security.py"
 check_file "hooks-handlers/post-edit-tracker.py"
 check_file "hooks-handlers/session-learn.py"
 check_file "hooks-handlers/session-memory.sh"
 check_file "hooks-handlers/output-mode.sh"
 check_file "hooks-handlers/post-compact-inject.py"
+check_file "hooks-handlers/output-compressor.py"
+check_file "hooks-handlers/prompt-router.py"
+check_file "hooks-handlers/lineage-manager.py"
 echo ""
 
 # ─── Utility Scripts (referenced by commands) ────────────────────────────────
@@ -106,6 +111,8 @@ echo ""
 echo "▸ Data & Config"
 check_file "data/sentinel-config.json"
 check_file "data/security-patterns.json"
+check_file "data/design-system-template.md"
+check_file "data/sentinel-gitignore-template"
 echo ""
 
 # ─── bin/ CLI Tools ──────────────────────────────────────────────────────────
@@ -113,6 +120,9 @@ echo "▸ CLI Tools (bin/)"
 check_file "bin/sentinel-status"
 check_file "bin/sentinel-report"
 check_file "bin/sentinel-reset"
+check_file "bin/sentinel-doctor"
+check_file "bin/sentinel-refresh"
+check_file "bin/sentinel-learn"
 echo ""
 
 # ─── JSON Validation ─────────────────────────────────────────────────────────
@@ -140,7 +150,13 @@ for py_file in \
     "hooks-handlers/post-edit-tracker.py" \
     "hooks-handlers/session-learn.py" \
     "hooks-handlers/post-compact-inject.py" \
-    "hooks-handlers/scope_detector.py"; do
+    "hooks-handlers/scope_detector.py" \
+    "hooks-handlers/output-compressor.py" \
+    "hooks-handlers/prompt-router.py" \
+    "hooks-handlers/lineage-manager.py" \
+    "bin/sentinel-doctor" \
+    "bin/sentinel-refresh" \
+    "bin/sentinel-learn"; do
     if [ -f "$PLUGIN_ROOT/$py_file" ]; then
         if python3 -c "import py_compile; py_compile.compile('$PLUGIN_ROOT/$py_file', doraise=True)" 2>/dev/null; then
             echo "  VALID:   $py_file"
@@ -166,6 +182,38 @@ for sh_file in \
         fi
     fi
 done
+echo ""
+
+# ─── MCP Server Nesting Check ────────────────────────────────────────────────
+# There is no mechanism to nest one plugin's MCP server inside another's.
+# Claude Code registers MCP servers at the plugin root level only.
+# If a companion plugin with its own .mcp.json is found nested inside this
+# plugin directory, it will silently fail — the nested server never registers.
+# This check detects that early and tells the user how to fix it.
+echo "▸ MCP Server Nesting Check"
+NESTED_MCP=$(find "$PLUGIN_ROOT" -mindepth 2 -name ".mcp.json" 2>/dev/null || true)
+if [ -n "$NESTED_MCP" ]; then
+    echo ""
+    echo "  WARNING: Nested MCP server(s) detected inside this plugin:"
+    while IFS= read -r mcp_path; do
+        nested_plugin_dir=$(dirname "$mcp_path")
+        nested_plugin_name=$(basename "$nested_plugin_dir")
+        echo "    $mcp_path"
+        echo ""
+        echo "  PROBLEM: There is no mechanism to nest one plugin's MCP server"
+        echo "           inside another's. Claude Code only registers .mcp.json"
+        echo "           at the plugin root level — '$nested_plugin_name' will"
+        echo "           never load its MCP server from this location."
+        echo ""
+        echo "  FIX: Install '$nested_plugin_name' as a sibling plugin instead:"
+        echo "    mv \"$nested_plugin_dir\" \"$(dirname "$PLUGIN_ROOT")/$nested_plugin_name\""
+        echo "    claude --plugin-dir \"$(dirname "$PLUGIN_ROOT")/$nested_plugin_name\""
+        echo ""
+    done <<< "$NESTED_MCP"
+    ERRORS=$((ERRORS + 1))
+else
+    echo "  OK:      no nested MCP servers found"
+fi
 echo ""
 
 # ─── Runtime Checks ──────────────────────────────────────────────────────────
@@ -204,31 +252,42 @@ echo ""
 # ─── Summary ─────────────────────────────────────────────────────────────────
 echo "═══════════════════════════════════════════════════"
 if [ $ERRORS -eq 0 ]; then
-    echo "  Status: SUCCESS — all components validated"
+    echo "  Status: SUCCESS — all 68 components validated"
     echo ""
-    echo "  9 Categories:"
+    echo "  11 Skills:"
     echo "    A. Code Review    /sentinel:review [full|quick|security|quality|tests]"
     echo "    B. AI Dev Toolkit /sentinel:ai-forge [build|research|blueprint|validate]"
     echo "    C. Output Styles  /sentinel:style-engine [focused|learning|verbose]"
     echo "    D. Browser & A11y /sentinel:browser-pilot [--flow|--a11y|--screenshot]"
-    echo "    E. Flow Memory    /sentinel:flow-memory [dashboard|add|decisions|clean]"
-    echo "    F. Frontend Design/sentinel:design-craft [component|system|audit]"
+    echo "    E. Flow Memory    /sentinel:flow-memory [dashboard|add|decisions|rollover]"
+    echo "    F. Frontend Design/sentinel:design-craft [extract|audit-design|critique]"
     echo "    G. Documentation  /sentinel:doc-engine [readme|api|guide|seo]"
     echo "    H. Infrastructure /sentinel:infra-ops [dag|dbt|query|lineage|profile]"
     echo "    I. DX & Meta      /sentinel:dx-meta [claude-md|hooks|setup|analyze]"
+    echo "    J. Health Diag    /sentinel:sentinel-doctor [--full|--quick|--hooks|--config]"
+    echo "    K. Plugin Audit   /sentinel:sentinel-audit [skills|agents|hooks|all]"
     echo ""
-    echo "  CLI Tools (available in Bash):"
+    echo "  6 CLI Tools (available in Bash):"
     echo "    sentinel-status   Print health score and recent learnings"
     echo "    sentinel-report   Formatted session history markdown"
     echo "    sentinel-reset    Archive and clear data files"
+    echo "    sentinel-doctor   Full plugin health diagnostic (exit 0/1/2)"
+    echo "    sentinel-refresh  5-outcome maintenance for .sentinel/learnings/"
+    echo "    sentinel-learn    Write typed learning entries (knowledge|bug)"
     echo ""
-    echo "  Always-active Hooks:"
-    echo "    PreToolUse    Security pattern blocking (16 patterns)"
-    echo "    PostToolUse   Edit tracking + risk classification + churn detection"
-    echo "    SessionStart  Memory context + output style injection"
-    echo "    PreCompact    Learning extraction before transcript compaction"
-    echo "    PostCompact   Memory re-injection after compaction"
-    echo "    Stop          Full session learning extraction"
+    echo "  7 Always-active Hooks:"
+    echo "    PreToolUse        Security blocking (Layer 1: 16 patterns, Layer 2: TDD/blueprint/destructive gates)"
+    echo "    PostToolUse       Edit tracking + risk classification + output compression"
+    echo "    UserPromptSubmit  Zero-token routing (>review/>rollover/>doctor shortcuts)"
+    echo "    SessionStart      Memory context + output style + lineage chain injection"
+    echo "    PreCompact        Learning extraction before transcript compaction"
+    echo "    PostCompact       Memory re-injection after compaction"
+    echo "    Stop              Full session learning extraction + lineage stop event"
+    echo ""
+    echo "  24 Agents — 3 new in v3:"
+    echo "    design-auditor    Detects UI drift against .sentinel/design-system.md"
+    echo "    sentinel-auditor  120-point rubric for agents/skills/hooks quality"
+    echo "    risk-gatekeeper   5-axis risk matrix with hard human gate for CRITICAL tier"
     echo ""
     echo "  Quick check: /sentinel:quick-check"
 else

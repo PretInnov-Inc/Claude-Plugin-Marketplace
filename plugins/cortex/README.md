@@ -384,7 +384,7 @@ cortex-inspect export       # Export all data to cortex-export.json
 
 ## Part of the PretInnov Plugin Ecosystem
 
-Cortex is one of 4 plugins in the [PretInnov Marketplace](../../README.md):
+Cortex is one of 5 plugins in the [PretInnov Marketplace](../../README.md):
 
 | Plugin | What It Does |
 |--------|-------------|
@@ -392,8 +392,11 @@ Cortex is one of 4 plugins in the [PretInnov Marketplace](../../README.md):
 | **[Clamper](../clamper/README.md)** | Code verification, project DNA, ecosystem scaffolding |
 | **Cortex** (you are here) | Self-learning intelligence — cross-project patterns, decision tracking, self-evolution |
 | **[Forge](../forge/README.md)** | Plugin builder — create full plugins from chat prompts |
+| **[codebase-radar](../codebase-radar/README.md)** | Hybrid semantic + BM25 search via LanceDB — find code by meaning, auto-reindex as you edit |
 
 **Cortex + Sentinel:** Both track session intelligence but from different angles. Sentinel focuses on code review learnings and per-session health scores. Cortex focuses on cross-project behavioral patterns and self-evolution. They complement each other — Sentinel makes your code better, Cortex makes your workflow better.
+
+**Cortex + codebase-radar:** Cortex tracks decisions and learnings (the "why"); codebase-radar makes the code itself semantically searchable (the "where"). Session intelligence meets semantic search.
 
 ---
 

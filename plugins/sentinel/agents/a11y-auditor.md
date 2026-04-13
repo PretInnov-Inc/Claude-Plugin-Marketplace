@@ -1,15 +1,20 @@
 ---
 name: a11y-auditor
 description: |
-  Web accessibility auditor. Evaluates web pages against WCAG 2.1 AA standards using
-  Playwright MCP's accessibility tree snapshot. Checks heading hierarchy, ARIA usage,
-  keyboard navigation, color contrast indicators, form labels, focus management, and
-  screen reader compatibility. Produces severity-sorted findings with specific remediation.
+  Use when: user wants a WCAG 2.1 AA accessibility audit on a running web app, or when style-writer/web-pilot flags potential accessibility issues. Requires a running web server.
+
+  DO NOT use for: writing accessible component code (→ style-writer, which enforces a11y by default), reviewing static HTML (read it directly), automated CI accessibility testing (set that up inline).
 
   <example>
-  Context: User wants accessibility check
+  Context: Accessibility compliance check on running app
   user: "Check if my app at localhost:3000 is accessible"
-  assistant: "I'll launch a11y-auditor for a WCAG 2.1 AA accessibility audit."
+  assistant: "I'll launch a11y-auditor for a full WCAG 2.1 AA audit against the live app."
+  </example>
+
+  <example>
+  Context: After implementing new UI components
+  user: "Is the new form I built accessible?"
+  assistant: "I'll use a11y-auditor to audit the form against WCAG 2.1 AA requirements."
   </example>
 model: haiku
 tools: Read, Write, Glob, Grep, Bash, TodoWrite

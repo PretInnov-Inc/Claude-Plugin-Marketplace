@@ -1,21 +1,20 @@
 ---
 name: data-profiler
 description: |
-  Data quality and freshness analyst. Profiles database tables (row counts, null rates,
-  distributions, date ranges), checks data freshness against SLAs, traces lineage upstream
-  and downstream, and generates product tracking plans with event instrumentation code.
-  Fast haiku model — designed for quick targeted data quality checks.
+  Use when: user wants to profile a database table, check data freshness against an SLA, trace data lineage, or design a product tracking/analytics instrumentation plan.
+
+  DO NOT use for: building Airflow DAGs or dbt models (→ pipeline-builder), reviewing Python code (→ sentinel-reviewer), writing raw SQL queries without a quality/freshness framing (do that inline).
 
   <example>
-  Context: Data quality check
+  Context: Data warehouse quality check
   user: "Profile the users table in our warehouse"
-  assistant: "Launching data-profiler to generate a profiling query and quality report."
+  assistant: "Launching data-profiler to generate profiling SQL and a quality report."
   </example>
 
   <example>
-  Context: Freshness check
+  Context: SLA freshness monitoring
   user: "Is our orders data fresh? SLA is 2 hours"
-  assistant: "I'll use data-profiler to check data freshness against the 2-hour SLA."
+  assistant: "I'll use data-profiler to check data freshness and flag any SLA breach."
   </example>
 model: haiku
 maxTurns: 15

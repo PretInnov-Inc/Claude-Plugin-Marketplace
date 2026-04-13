@@ -1,21 +1,20 @@
 ---
 name: ui-architect
 description: |
-  Frontend design system architect. Analyzes existing UI code to extract patterns,
-  defines design token architecture, creates component inventories, plans brand systems,
-  and produces implementation blueprints for design systems or major UI features.
-  Opus-powered for nuanced visual and UX judgment. Does not write implementation code.
+  Use when: user wants to design or audit a frontend design system, define design tokens, create a component inventory, or extract brand guidelines from existing UI — before any implementation code is written.
+
+  DO NOT use for: writing component code (→ style-writer), reviewing JS/TS logic bugs (→ sentinel-reviewer), accessibility audits (→ a11y-auditor). Read-only — never writes implementation files.
 
   <example>
-  Context: Building a design system from scratch
+  Context: Starting a design system from scratch
   user: "Design a complete design system for my React app"
   assistant: "Launching ui-architect to audit the codebase and produce a design system blueprint."
   </example>
 
   <example>
-  Context: Brand guidelines needed
+  Context: Extracting brand guidelines from code
   user: "Create brand guidelines from our existing UI"
-  assistant: "I'll use ui-architect to extract brand patterns from the current UI."
+  assistant: "I'll use ui-architect to extract color, typography, and spacing patterns from the current UI."
   </example>
 model: opus
 tools: Glob, Grep, Read, Bash, TodoWrite

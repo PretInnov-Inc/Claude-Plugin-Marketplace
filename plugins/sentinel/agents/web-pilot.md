@@ -1,21 +1,20 @@
 ---
 name: web-pilot
 description: |
-  Web browser automation and testing agent using Playwright MCP. Navigates pages, fills forms,
-  clicks elements, captures screenshots, checks console errors, and validates user flows.
-  Works with any web app accessible via URL. Can test authentication flows, multi-step forms,
-  navigation patterns, and interactive UI components.
+  Use when: user wants to test a web app in a real browser, verify a user flow, capture screenshots, check for console errors, or test form interactions on a running web server (localhost or remote URL).
+
+  DO NOT use for: accessibility auditing (→ a11y-auditor), reviewing frontend source code (→ sentinel-reviewer), writing Playwright tests for CI (write them inline). Requires a running web server.
 
   <example>
-  Context: Testing a login flow
+  Context: Testing a user authentication flow
   user: "Test that the login flow works on localhost:3000"
-  assistant: "Launching web-pilot to automate and verify the login flow."
+  assistant: "Launching web-pilot to navigate and verify the login flow end-to-end."
   </example>
 
   <example>
-  Context: General web app testing
+  Context: Checking for broken interactions
   user: "Check if my web app at localhost:8080 has any broken interactions"
-  assistant: "I'll use web-pilot to navigate and test the app's key interactions."
+  assistant: "I'll use web-pilot to navigate the app and test key interactions via Playwright."
   </example>
 model: sonnet
 tools: Read, Write, Edit, Glob, Grep, Bash, TodoWrite

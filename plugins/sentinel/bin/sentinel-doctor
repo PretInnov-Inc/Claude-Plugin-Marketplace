@@ -1,0 +1,312 @@
+#!/usr/bin/env python3
+"""
+sentinel-doctor — Unified Sentinel Health Diagnostic (v3)
+
+Usage:
+  sentinel-doctor [--full|--quick|--hooks|--config|--data|--lineage]
+
+Replaces scattered sentinel-status/report/reset with one unified diagnostic.
+Exit codes: 0 = HEALTHY, 1 = DEGRADED, 2 = BROKEN
+"""
+
+import json
+import os
+import subprocess
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+
+def get_plugin_root():
+    return os.environ.get("CLAUDE_PLUGIN_ROOT", str(Path(__file__).parent.parent))
+
+
+def green(s): return f"\033[32m{s}\033[0m"
+def yellow(s): return f"\033[33m{s}\033[0m"
+def red(s): return f"\033[31m{s}\033[0m"
+def bold(s): return f"\033[1m{s}\033[0m"
+
+
+def check_json_file(path, required_keys=None):
+    """Returns (ok, message)."""
+    if not path.exists():
+        return False, f"MISSING: {path}"
+    try:
+        data = json.loads(path.read_text())
+        if required_keys:
+            missing = [k for k in required_keys if k not in data]
+            if missing:
+                return False, f"VALID JSON but missing keys: {missing}"
+        return True, "VALID"
+    except json.JSONDecodeError as e:
+        return False, f"INVALID JSON: {e}"
+
+
+def check_python_handler(path):
+    """Returns (ok, message)."""
+    if not path.exists():
+        return False, f"MISSING: {path.name}"
+    try:
+        import ast
+        ast.parse(path.read_text())
+    except SyntaxError as e:
+        return False, f"SYNTAX ERROR: {e}"
+
+    content = path.read_text()
+    issues = []
+    if "#!/usr/bin/env python3" not in content:
+        issues.append("missing shebang")
+    if "json.loads(sys.stdin.read())" not in content:
+        issues.append("missing stdin read")
+    if "(json.JSONDecodeError" not in content and "EOFError" not in content:
+        issues.append("missing JSONDecodeError handling")
+
+    # Check for forbidden imports
+    forbidden = ["requests", "httpx", "click", "pydantic", "fastapi", "flask"]
+    found_forbidden = [f for f in forbidden if f"import {f}" in content]
+    if found_forbidden:
+        issues.append(f"FORBIDDEN imports: {found_forbidden}")
+
+    if issues:
+        return False, f"ISSUES: {', '.join(issues)}"
+    return True, "OK"
+
+
+def check_bash_handler(path):
+    """Returns (ok, message)."""
+    if not path.exists():
+        return False, f"MISSING: {path.name}"
+    result = subprocess.run(["bash", "-n", str(path)], capture_output=True, text=True)
+    if result.returncode != 0:
+        return False, f"SYNTAX ERROR: {result.stderr.strip()}"
+    return True, "OK"
+
+
+def run_full_diagnostic(plugin_root):
+    issues = []
+    warnings = []
+    results = []
+
+    # 1. Plugin manifest
+    manifest = plugin_root / ".claude-plugin" / "plugin.json"
+    ok, msg = check_json_file(manifest, required_keys=["name"])
+    status = green("✓") if ok else red("✗")
+    results.append(f"  {status} Plugin manifest          {msg}")
+    if not ok:
+        issues.append(f"[manifest] {msg}")
+
+    # 2. hooks.json
+    hooks_file = plugin_root / "hooks" / "hooks.json"
+    ok, msg = check_json_file(hooks_file)
+    if ok:
+        try:
+            hooks_data = json.loads(hooks_file.read_text())
+            hook_count = sum(len(v) for v in hooks_data.get("hooks", {}).values() if isinstance(v, list))
+            msg = f"VALID — {hook_count} event types"
+        except Exception:
+            pass
+    status = green("✓") if ok else red("✗")
+    results.append(f"  {status} hooks/hooks.json         {msg}")
+    if not ok:
+        issues.append(f"[hooks] {msg}")
+
+    # 3. Hook handlers
+    handlers_dir = plugin_root / "hooks-handlers"
+    handler_files = list(handlers_dir.glob("*.py")) + list(handlers_dir.glob("*.sh")) if handlers_dir.exists() else []
+    handler_issues = []
+    for hf in handler_files:
+        if hf.suffix == ".py":
+            ok, msg = check_python_handler(hf)
+        else:
+            ok, msg = check_bash_handler(hf)
+        if not ok:
+            handler_issues.append(f"{hf.name}: {msg}")
+
+    if handler_issues:
+        status = red("✗")
+        results.append(f"  {status} Hook handlers ({len(handler_files)})    {len(handler_issues)} ERRORS")
+        for hi in handler_issues:
+            results.append(f"      → {hi}")
+            issues.append(f"[handler] {hi}")
+    else:
+        results.append(f"  {green('✓')} Hook handlers ({len(handler_files)})    all syntax valid, stdlib only")
+
+    # 4. sentinel-config.json
+    config_file = plugin_root / "data" / "sentinel-config.json"
+    required_v3_keys = ["memory", "activation", "compression", "prompt_routing"]
+    ok, msg = check_json_file(config_file)
+    if ok:
+        try:
+            cfg = json.loads(config_file.read_text())
+            missing_v3 = [k for k in required_v3_keys if k not in cfg]
+            if missing_v3:
+                msg = f"VALID — missing v3 keys: {missing_v3}"
+                warnings.append(f"[config] v3 sections missing: {missing_v3}")
+                status = yellow("⚠")
+            else:
+                msg = "VALID — all v3 sections present"
+                status = green("✓")
+        except Exception:
+            status = green("✓")
+    else:
+        status = red("✗")
+        issues.append(f"[config] {msg}")
+    results.append(f"  {status} sentinel-config.json    {msg}")
+
+    # 5. Data files
+    data_dir = plugin_root / "data"
+    expected_jsonl = ["learnings.jsonl", "decisions.jsonl", "anti-patterns.jsonl",
+                      "session-log.jsonl", "edit-log.jsonl"]
+    missing_jsonl = [f for f in expected_jsonl if not (data_dir / f).exists()]
+    existing_jsonl = [f for f in expected_jsonl if (data_dir / f).exists()]
+
+    if missing_jsonl and not existing_jsonl:
+        status, msg = yellow("⚠"), f"no JSONL files yet (first session will create them)"
+        warnings.append("[data] no JSONL files initialized")
+    elif missing_jsonl:
+        status, msg = yellow("⚠"), f"{len(existing_jsonl)} files present, missing: {missing_jsonl}"
+        warnings.append(f"[data] missing: {missing_jsonl}")
+    else:
+        total_entries = 0
+        for f in existing_jsonl:
+            try:
+                lines = (data_dir / f).read_text().strip().splitlines()
+                total_entries += len([l for l in lines if l.strip()])
+            except Exception:
+                pass
+        status, msg = green("✓"), f"{len(existing_jsonl)} files, ~{total_entries} entries"
+    results.append(f"  {status} Data JSONL files         {msg}")
+
+    # 6. Output styles
+    styles_dir = plugin_root / "output-styles"
+    style_files = list(styles_dir.glob("*.md")) if styles_dir.exists() else []
+    if style_files:
+        results.append(f"  {green('✓')} Output styles ({len(style_files)})      {', '.join(f.stem for f in style_files)}")
+    else:
+        results.append(f"  {yellow('⚠')} Output styles           none found")
+        warnings.append("[styles] no output style files")
+
+    # 7. Security patterns
+    sec_file = plugin_root / "data" / "security-patterns.json"
+    ok, msg = check_json_file(sec_file)
+    if ok:
+        try:
+            sec_data = json.loads(sec_file.read_text())
+            count = len(sec_data.get("patterns", []))
+            msg = f"VALID — {count} patterns"
+        except Exception:
+            pass
+    status = green("✓") if ok else yellow("⚠")
+    results.append(f"  {status} Security patterns        {msg}")
+    if not ok:
+        warnings.append(f"[security] {msg}")
+
+    # 8. Session lineage
+    username = os.environ.get("USER", os.environ.get("USERNAME", "default"))
+    lineage_path = Path(".sentinel") / "lineage" / f"{username}.json"
+    if lineage_path.exists():
+        try:
+            lineage = json.loads(lineage_path.read_text())
+            ancestor_count = len(lineage.get("ancestors", []))
+            last_seen = lineage.get("last_seen", "unknown")[:10]
+            health = lineage.get("last_health", "?")
+            msg = f"active — {ancestor_count} ancestors, last: {last_seen}, health: {health}/100"
+            status = green("✓")
+        except Exception:
+            msg = "exists but unreadable"
+            status = yellow("⚠")
+    else:
+        msg = "no lineage file yet (starts at first session)"
+        status = yellow("⚠")
+    results.append(f"  {status} Session lineage          {msg}")
+
+    # 9. Typed learning store
+    typed_store = Path(".sentinel") / "learnings"
+    if typed_store.exists():
+        md_files = list(typed_store.rglob("*.md"))
+        results.append(f"  {green('✓')} Typed learning store    {len(md_files)} entries across {len(list(typed_store.iterdir()))} categories")
+    else:
+        results.append(f"  {yellow('⚠')} Typed learning store    .sentinel/learnings/ not created yet")
+        warnings.append("[store] .sentinel/learnings/ missing — will be created on first Stop hook")
+
+    return results, issues, warnings
+
+
+def verdict_line(issues, warnings):
+    if issues:
+        return red("BROKEN") + f" ({len(issues)} failures, {len(warnings)} warnings)"
+    elif warnings:
+        return yellow("DEGRADED") + f" (0 failures, {len(warnings)} warnings)"
+    else:
+        return green("HEALTHY") + " — all systems operational"
+
+
+def main():
+    args = sys.argv[1:]
+    mode = args[0] if args else "--full"
+
+    plugin_root = Path(get_plugin_root())
+
+    print(bold("\nSENTINEL DOCTOR — HEALTH REPORT"))
+    print("=" * 50)
+    print(f"Plugin root: {plugin_root}")
+    print(f"Checked:     {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
+    print(f"Mode:        {mode}")
+    print()
+
+    if mode == "--quick":
+        # Quick mode: just config + hooks
+        config_file = plugin_root / "data" / "sentinel-config.json"
+        hooks_file = plugin_root / "hooks" / "hooks.json"
+        config_ok, config_msg = check_json_file(config_file)
+        hooks_ok, hooks_msg = check_json_file(hooks_file)
+
+        handlers_dir = plugin_root / "hooks-handlers"
+        handler_files = list(handlers_dir.glob("*.py")) + list(handlers_dir.glob("*.sh")) if handlers_dir.exists() else []
+        handler_errors = []
+        for hf in handler_files:
+            ok, msg = check_python_handler(hf) if hf.suffix == ".py" else check_bash_handler(hf)
+            if not ok:
+                handler_errors.append(hf.name)
+
+        print("SENTINEL QUICK CHECK")
+        print("-" * 30)
+        print(f"  config.json:   {green('VALID') if config_ok else red('INVALID')}")
+        print(f"  hooks.json:    {green('VALID') if hooks_ok else red('INVALID')}")
+        print(f"  handlers ({len(handler_files)}): {green('ALL OK') if not handler_errors else red(str(len(handler_errors)) + ' ERRORS: ' + ', '.join(handler_errors))}")
+        issues = [1 for ok in [config_ok, hooks_ok] if not ok] + handler_errors
+        print(f"\nVERDICT: {verdict_line(issues, [])}")
+        sys.exit(2 if issues else 0)
+
+    # Full diagnostic
+    print("COMPONENT STATUS")
+    print("-" * 50)
+    results, issues, warnings = run_full_diagnostic(plugin_root)
+    for line in results:
+        print(line)
+
+    if issues or warnings:
+        print()
+        print("ISSUES FOUND")
+        print("-" * 50)
+        for issue in issues:
+            print(f"  {red('✗ FAIL')} {issue}")
+        for warn in warnings:
+            print(f"  {yellow('⚠ WARN')} {warn}")
+
+    print()
+    print(f"VERDICT: {verdict_line(issues, warnings)}")
+
+    if issues:
+        print(f"\n{red('BROKEN')}: Core hooks may not fire. Check failing components above.")
+        sys.exit(2)
+    elif warnings:
+        print(f"\n{yellow('DEGRADED')}: Core features work, some v3 features may be inactive.")
+        sys.exit(1)
+    else:
+        print(f"\n{green('HEALTHY')}: All Sentinel components operational.")
+        sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()

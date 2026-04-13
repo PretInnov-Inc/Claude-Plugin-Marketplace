@@ -1,0 +1,211 @@
+#!/usr/bin/env python3
+"""
+sentinel-refresh — Typed Learning Store Maintenance (v3)
+
+Applies the 5-outcome maintenance model to .sentinel/learnings/:
+  keep        — Still relevant and accurate (touch timestamp, skip)
+  update      — Core fact correct but details changed (prompt for update)
+  consolidate — Duplicate of another entry (merge + remove duplicate)
+  replace     — Old approach deprecated (supersede with new entry)
+  delete      — No longer accurate (remove — git is the archive)
+
+Usage:
+  sentinel-refresh [--auto] [--category <cat>] [--dry-run]
+
+Options:
+  --auto        Apply safe actions automatically (keep, update_status_to_stale)
+  --category    Only process entries in this category
+  --dry-run     Show what would happen without making changes
+"""
+
+import json
+import os
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+
+VALID_CATEGORIES = {
+    "build-errors", "plugin-design", "skill-authoring", "security",
+    "workflow", "testing", "architecture", "general"
+}
+
+SAFE_AUTO_ACTIONS = {"keep", "update_status_to_stale"}
+REVIEW_REQUIRED_ACTIONS = {"consolidate", "replace", "delete"}
+
+
+def now_date():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+def read_frontmatter(md_path):
+    """Extract YAML frontmatter from a markdown file."""
+    try:
+        content = md_path.read_text(encoding="utf-8")
+        if not content.startswith("---"):
+            return None, content
+        end = content.find("---", 3)
+        if end == -1:
+            return None, content
+        fm_text = content[3:end].strip()
+        body = content[end + 3:].strip()
+
+        # Simple key: value YAML parser (no PyYAML dependency)
+        fm = {}
+        for line in fm_text.splitlines():
+            if ":" in line:
+                k, _, v = line.partition(":")
+                fm[k.strip()] = v.strip().strip('"').strip("'")
+        return fm, body
+    except Exception:
+        return None, ""
+
+
+def write_frontmatter(md_path, fm, body):
+    """Write updated frontmatter + body back to file."""
+    lines = []
+    for k, v in fm.items():
+        if isinstance(v, list):
+            lines.append(f'{k}: [{", ".join(v)}]')
+        elif any(c in str(v) for c in [':', '#', '"', "'"]):
+            lines.append(f'{k}: "{v}"')
+        else:
+            lines.append(f'{k}: {v}')
+
+    content = f"---\n{chr(10).join(lines)}\n---\n\n{body}\n"
+    md_path.write_text(content, encoding="utf-8")
+
+
+def assess_entry(fm, body, category):
+    """
+    Apply heuristic maintenance rules to decide the outcome.
+    Returns (action, reason) where action ∈ SAFE_AUTO_ACTIONS ∪ REVIEW_REQUIRED_ACTIONS.
+    """
+    status = fm.get("status", "active")
+    date_str = fm.get("date", "")
+    track = fm.get("track", "knowledge")
+
+    # Already marked stale: consolidate or delete candidate
+    if status == "stale":
+        return "consolidate", "Entry already marked stale — review for merge or delete"
+
+    # Old entries (> 180 days) in fast-moving categories
+    try:
+        entry_date = datetime.strptime(date_str[:10], "%Y-%m-%d")
+        age_days = (datetime.now() - entry_date).days
+        fast_moving_cats = {"build-errors", "skill-authoring", "workflow"}
+        if age_days > 180 and category in fast_moving_cats:
+            return "update_status_to_stale", f"Entry is {age_days} days old in fast-moving category '{category}'"
+    except Exception:
+        pass
+
+    # Bug entries with 'resolved' status: candidate for deletion
+    if track == "bug" and fm.get("resolution_type") == "fixed":
+        return "keep", "Bug is marked fixed — keep as historical record"
+
+    # Knowledge entries with 'deferred' resolution: review needed
+    if fm.get("resolution_type") == "deferred":
+        return "update_status_to_stale", "Resolution type is 'deferred' — update or mark stale"
+
+    return "keep", "Entry appears current and accurate"
+
+
+def run_refresh(store_path, auto=False, category_filter=None, dry_run=False):
+    if not store_path.exists():
+        print(f"No typed learning store found at {store_path}")
+        print("Create it with: sentinel-learn knowledge 'your insight'")
+        sys.exit(0)
+
+    stats = {"keep": 0, "update_status_to_stale": 0, "consolidate": 0, "replace": 0, "delete": 0}
+    pending_review = []
+    processed = 0
+
+    categories = [d for d in store_path.iterdir() if d.is_dir()]
+    if category_filter:
+        categories = [d for d in categories if d.name == category_filter]
+
+    for cat_dir in sorted(categories):
+        category = cat_dir.name
+        md_files = sorted(cat_dir.glob("*.md"))
+        if not md_files:
+            continue
+
+        print(f"\n  [{category}] {len(md_files)} entries")
+
+        for md_path in md_files:
+            fm, body = read_frontmatter(md_path)
+            if fm is None:
+                print(f"    ⚠ SKIP {md_path.name} — no frontmatter")
+                continue
+
+            action, reason = assess_entry(fm, body, category)
+            stats[action] = stats.get(action, 0) + 1
+            processed += 1
+
+            if action in SAFE_AUTO_ACTIONS:
+                if action == "update_status_to_stale" and not dry_run and auto:
+                    fm["status"] = "stale"
+                    write_frontmatter(md_path, fm, body)
+                    print(f"    → UPDATED {md_path.name} → status=stale ({reason})")
+                elif action == "keep":
+                    print(f"    ✓ KEEP  {md_path.name}")
+                else:
+                    print(f"    ⚠ WOULD {action.upper()} {md_path.name}: {reason}")
+
+            elif action in REVIEW_REQUIRED_ACTIONS:
+                pending_review.append({
+                    "path": str(md_path),
+                    "action": action,
+                    "reason": reason,
+                    "title": fm.get("title", md_path.stem),
+                    "category": category
+                })
+                print(f"    ⚠ REVIEW NEEDED — {action.upper()}: {reason}")
+
+    print()
+    print("=" * 50)
+    print("SENTINEL REFRESH REPORT")
+    print("=" * 50)
+    print(f"Processed:   {processed} entries across {len(categories)} categories")
+    print(f"Keep:        {stats.get('keep', 0)}")
+    print(f"→ Stale:     {stats.get('update_status_to_stale', 0)}")
+    print(f"Review needed:")
+    print(f"  Consolidate: {stats.get('consolidate', 0)}")
+    print(f"  Replace:     {stats.get('replace', 0)}")
+    print(f"  Delete:      {stats.get('delete', 0)}")
+
+    if pending_review:
+        print()
+        print("ENTRIES REQUIRING HUMAN REVIEW:")
+        print("-" * 40)
+        for item in pending_review:
+            print(f"\n  [{item['action'].upper()}] {item['title']}")
+            print(f"  Path:   {item['path']}")
+            print(f"  Reason: {item['reason']}")
+            print(f"  Action: Review manually and run `sentinel-refresh --auto` after updating status")
+
+    if dry_run:
+        print("\n(dry-run: no files were modified)")
+
+
+def main():
+    args = sys.argv[1:]
+    auto = "--auto" in args
+    dry_run = "--dry-run" in args
+    category_filter = None
+
+    if "--category" in args:
+        idx = args.index("--category")
+        if idx + 1 < len(args):
+            category_filter = args[idx + 1]
+            if category_filter not in VALID_CATEGORIES:
+                print(f"Invalid category: {category_filter}")
+                print(f"Valid categories: {', '.join(sorted(VALID_CATEGORIES))}")
+                sys.exit(1)
+
+    store_path = Path(".sentinel") / "learnings"
+    run_refresh(store_path, auto=auto, category_filter=category_filter, dry_run=dry_run)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,19 +1,18 @@
 ---
 name: session-scribe
 description: |
-  Manual session learning extractor. When asked to "record this", "remember this decision",
-  "log what we learned", or "save this as a learning", extracts key insights from the current
-  conversation and writes them to the Sentinel memory store. Lighter than memory-warden —
-  designed for quick, targeted captures during a session rather than full analysis.
+  Use when: user says "remember this", "log this decision", "note that", "save this as a learning", or any variant of manually capturing an insight from the current conversation. Quick single-entry writer.
+
+  DO NOT use for: analyzing past sessions (→ memory-warden), full memory cleanup (→ memory-warden), automatic learning extraction at session end (handled by session-learn.py hook automatically).
 
   <example>
-  Context: User wants to capture a decision
+  Context: User wants to capture an architectural decision
   user: "Remember that we chose SQLite over Postgres because deployment simplicity matters more than scale"
   assistant: "I'll use session-scribe to log this as a decision in Sentinel memory."
   </example>
 
   <example>
-  Context: User wants to save a learning
+  Context: User wants to save a discovered insight
   user: "Note that pnpm workspaces behave differently from npm when hoisting peer deps"
   assistant: "Logging that to Sentinel memory via session-scribe."
   </example>

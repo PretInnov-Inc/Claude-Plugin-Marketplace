@@ -2,12 +2,20 @@
 name: code-polisher
 maxTurns: 25
 description: |
-  Post-review code simplification and polish. Runs AFTER other review agents pass. Simplifies code for clarity, reduces unnecessary complexity, and applies project conventions — all while preserving exact behavior. Language-agnostic.
+  Use when: user asks to clean up, simplify, or polish code AFTER bugs and security issues have been resolved. Also use as the final step in multi-agent review pipelines.
+
+  DO NOT use for: finding bugs (→ bug-hunter), reviewing compliance (→ sentinel-reviewer), refactoring architecture (→ ai-architect), performance optimization. Never run BEFORE review agents.
 
   <example>
   Context: Code passed review, needs polish
   user: "Clean up this code"
-  assistant: "I'll use code-polisher to simplify and polish while preserving behavior."
+  assistant: "I'll use code-polisher to simplify and polish while preserving exact behavior."
+  </example>
+
+  <example>
+  Context: Final step of multi-agent review pipeline
+  user: "run full review"
+  assistant: "sentinel-reviewer and bug-hunter have finished — using code-polisher as the final polish pass."
   </example>
 model: haiku
 tools: Glob, Grep, Read, Bash, Edit, Write, TodoWrite

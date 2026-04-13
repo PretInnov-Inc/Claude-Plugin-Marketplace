@@ -1,0 +1,223 @@
+#!/usr/bin/env python3
+"""
+sentinel-learn — Typed Learning Entry Writer (v3)
+
+Write a new typed Markdown learning to .sentinel/learnings/<category>/.
+
+Usage:
+  sentinel-learn knowledge [--category <cat>] [--applies-when <trigger>] <insight>
+  sentinel-learn bug [--category build-errors] [--severity <sev>] <symptom>
+
+Examples:
+  sentinel-learn knowledge "Prefer append-only JSONL for event logs, JSON for config"
+  sentinel-learn knowledge --category plugin-design "Hook handlers must use only stdlib"
+  sentinel-learn bug --severity high "Hook exits 0 but stdout has invalid JSON"
+
+Track values: knowledge | bug
+Categories:   build-errors, plugin-design, skill-authoring, security,
+              workflow, testing, architecture, general
+"""
+
+import os
+import re
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+
+VALID_CATEGORIES = {
+    "build-errors", "plugin-design", "skill-authoring", "security",
+    "workflow", "testing", "architecture", "general"
+}
+
+VALID_SEVERITIES = {"critical", "high", "medium", "low"}
+
+
+def now_date():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+def slugify(text, max_len=40):
+    text = text.lower()
+    text = re.sub(r"[^\w\s-]", "", text)
+    text = re.sub(r"[\s_]+", "-", text)
+    return text.strip("-")[:max_len]
+
+
+def get_session_id():
+    """Try to get session ID from environment, fallback to 'manual'."""
+    return os.environ.get("CLAUDE_SESSION_ID", "manual")
+
+
+def write_knowledge(args_list):
+    """Parse args and write knowledge MD."""
+    category = "general"
+    applies_when = "When working on related tasks"
+    insight_parts = []
+
+    i = 0
+    while i < len(args_list):
+        if args_list[i] == "--category" and i + 1 < len(args_list):
+            category = args_list[i + 1]
+            if category not in VALID_CATEGORIES:
+                print(f"Invalid category: {category}. Valid: {', '.join(sorted(VALID_CATEGORIES))}")
+                sys.exit(1)
+            i += 2
+        elif args_list[i] == "--applies-when" and i + 1 < len(args_list):
+            applies_when = args_list[i + 1]
+            i += 2
+        else:
+            insight_parts.append(args_list[i])
+            i += 1
+
+    if not insight_parts:
+        print("Error: insight text is required")
+        print("Usage: sentinel-learn knowledge [options] <insight text>")
+        sys.exit(1)
+
+    insight = " ".join(insight_parts)
+    date_str = now_date()
+    session_id = get_session_id()
+    title = insight[:60].replace('"', "'")
+    slug = slugify(insight[:50])
+    filename = f"{slug}-{date_str}.md"
+
+    out_dir = Path(".sentinel") / "learnings" / category
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / filename
+
+    if out_path.exists():
+        print(f"⚠ Entry already exists: {out_path}")
+        print("Edit it directly or use a different insight text.")
+        sys.exit(1)
+
+    content = f"""---
+title: "{title}"
+track: knowledge
+category: {category}
+tags: [{category}, manual]
+session_id: {session_id}
+date: {date_str}
+status: active
+applies_when: "{applies_when}"
+insight: "{insight[:100].replace('"', "'")}"
+---
+
+## Detail
+
+{insight}
+
+*Written manually via sentinel-learn on {date_str}.*
+"""
+
+    out_path.write_text(content, encoding="utf-8")
+    print(f"✓ Knowledge entry written:")
+    print(f"  Path:     {out_path}")
+    print(f"  Category: {category}")
+    print(f"  Insight:  {insight[:80]}{'...' if len(insight) > 80 else ''}")
+    print(f"\nRetrieve with: grep -r '{slug[:20]}' .sentinel/learnings/")
+
+
+def write_bug(args_list):
+    """Parse args and write bug MD."""
+    category = "build-errors"
+    severity = "medium"
+    symptom_parts = []
+
+    i = 0
+    while i < len(args_list):
+        if args_list[i] == "--category" and i + 1 < len(args_list):
+            category = args_list[i + 1]
+            if category not in VALID_CATEGORIES:
+                print(f"Invalid category: {category}")
+                sys.exit(1)
+            i += 2
+        elif args_list[i] == "--severity" and i + 1 < len(args_list):
+            severity = args_list[i + 1]
+            if severity not in VALID_SEVERITIES:
+                print(f"Invalid severity. Valid: {', '.join(VALID_SEVERITIES)}")
+                sys.exit(1)
+            i += 2
+        else:
+            symptom_parts.append(args_list[i])
+            i += 1
+
+    if not symptom_parts:
+        print("Error: symptom text is required")
+        print("Usage: sentinel-learn bug [options] <symptom text>")
+        sys.exit(1)
+
+    symptom = " ".join(symptom_parts)
+    date_str = now_date()
+    session_id = get_session_id()
+    title = symptom[:60].replace('"', "'")
+    slug = slugify(symptom[:50])
+    filename = f"bug-{slug}-{date_str}.md"
+
+    out_dir = Path(".sentinel") / "learnings" / category
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / filename
+
+    if out_path.exists():
+        print(f"⚠ Entry already exists: {out_path}")
+        sys.exit(1)
+
+    content = f"""---
+title: "{title}"
+track: bug
+category: {category}
+severity: {severity}
+tags: [{category}, manual]
+session_id: {session_id}
+date: {date_str}
+status: active
+symptoms: "{symptom[:100].replace('"', "'")}"
+root_cause: "TODO — fill in root cause"
+resolution_type: deferred
+prevention: "TODO — fill in prevention steps"
+---
+
+## Detail
+
+Symptoms: {symptom}
+
+Root cause: [fill in]
+
+Prevention: [fill in]
+
+*Written manually via sentinel-learn on {date_str}. Update root_cause and prevention fields.*
+"""
+
+    out_path.write_text(content, encoding="utf-8")
+    print(f"✓ Bug entry written:")
+    print(f"  Path:     {out_path}")
+    print(f"  Category: {category}")
+    print(f"  Severity: {severity}")
+    print(f"  Symptom:  {symptom[:80]}{'...' if len(symptom) > 80 else ''}")
+    print(f"\n⚠ Remember to fill in root_cause and prevention fields!")
+    print(f"  Edit: {out_path}")
+
+
+def main():
+    args = sys.argv[1:]
+
+    if not args or args[0] in ("-h", "--help"):
+        print(__doc__)
+        sys.exit(0)
+
+    track = args[0].lower()
+    rest = args[1:]
+
+    if track == "knowledge":
+        write_knowledge(rest)
+    elif track == "bug":
+        write_bug(rest)
+    else:
+        print(f"Unknown track: {track}")
+        print("Valid tracks: knowledge, bug")
+        print("Run sentinel-learn --help for usage")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

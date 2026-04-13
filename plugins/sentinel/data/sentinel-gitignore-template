@@ -1,0 +1,18 @@
+# .sentinel/.gitignore template
+# Copy to your project's .sentinel/.gitignore
+#
+# Per-user files (machine-specific, auto-generated):
+lineage/
+lineage.json
+compression.jsonl
+*.state.json
+
+# Learnings are committed (shared team knowledge):
+# !learnings/
+
+# Blueprints: committed only after approval
+# Unapproved drafts:
+blueprints/*.draft
+
+# Design system IS committed (shared design contract):
+# !design-system.md

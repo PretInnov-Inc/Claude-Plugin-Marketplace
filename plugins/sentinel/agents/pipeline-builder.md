@@ -1,21 +1,20 @@
 ---
 name: pipeline-builder
 description: |
-  Data pipeline and infrastructure builder. Creates Airflow DAGs, dbt models, data pipelines,
-  warehouse queries, OpenLineage extractors, and deployment configurations. Uses Airflow best
-  practices (TaskFlow API, proper retry/error handling), detects Airflow version automatically,
-  and works with Astronomer/Cosmos/dbt integrations.
+  Use when: user wants to build an Airflow DAG, dbt model, data pipeline, or data infrastructure configuration. Also use for Cosmos/dbt-in-Airflow integrations and OpenLineage setup.
+
+  DO NOT use for: profiling data quality (→ data-profiler), reviewing Python code style (→ sentinel-reviewer), designing pipeline architecture without implementation (→ ai-architect).
 
   <example>
-  Context: Building a data pipeline
+  Context: ETL pipeline needed
   user: "Create an Airflow DAG that extracts data from our Postgres DB and loads into BigQuery"
-  assistant: "Launching pipeline-builder to create the ETL DAG with proper error handling."
+  assistant: "Launching pipeline-builder to create the TaskFlow ETL DAG with proper retries and error handling."
   </example>
 
   <example>
-  Context: dbt model needed
+  Context: dbt model development
   user: "Create a dbt model for daily user activity aggregation"
-  assistant: "I'll use pipeline-builder to build the dbt model with proper refs, tests, and docs."
+  assistant: "I'll use pipeline-builder to build the dbt model with source refs, tests, and schema YAML."
   </example>
 model: sonnet
 tools: Read, Write, Edit, Glob, Grep, Bash, TodoWrite

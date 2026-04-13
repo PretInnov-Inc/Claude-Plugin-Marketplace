@@ -2,15 +2,15 @@
 name: dx-meta
 version: 2.0.0
 description: >-
-  Developer experience and meta-tooling. Use when the user wants to improve their CLAUDE.md,
-  set up automation hooks, analyze Claude Code usage, set up a project from scratch, create
-  recurring loops, analyze codebase setup, manage permissions, or configure automation behaviors.
-  Consolidates hookify, claude-code-setup, claude-md-management, security-guidance, developer-growth-analysis,
-  playground plugins. Triggers on: "improve CLAUDE.md", "set up hooks", "automate when X",
-  "configure my project", "claude setup", "analyze my usage", "create a hook rule",
-  "prevent me from doing X", "set up permissions", "recurring task", "grow as developer".
-argument-hint: "[claude-md|hooks|setup|automation|analyze|permissions|loop] [details]"
+  Use when: user wants to improve CLAUDE.md, set up automation hooks, audit project DX,
+  set up a project from scratch, manage permissions, or run Sentinel health diagnostics.
+  Triggers on: "improve CLAUDE.md", "set up hooks", "automate when X", "configure my project",
+  "claude setup", "analyze my usage", "create a hook rule", "prevent me from doing X",
+  "set up permissions", "sentinel doctor", "sentinel health", "check sentinel", "grow as developer".
+  DO NOT trigger for: building plugins (→ ai-forge), reviewing code (→ sentinel), managing memory (→ flow-memory).
+argument-hint: "[claude-md|hooks|setup|automation|analyze|permissions|doctor] [details]"
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash, TodoWrite, Agent
+execution_mode: direct
 ---
 
 # Sentinel DX Meta — Developer Experience & Meta-Tooling
@@ -102,6 +102,21 @@ Read `~/.claude/settings.json` and project `.claude/settings.json`:
 2. Check `defaultMode` — is it appropriate?
 3. Suggest tightening over-permissive rules
 4. Suggest adding missing commonly-needed permissions
+
+## Sentinel Health Check (v3)
+
+When user says "sentinel doctor", "check sentinel", or "sentinel health":
+Route to `bin/sentinel-doctor` if available:
+```bash
+${CLAUDE_PLUGIN_ROOT}/bin/sentinel-doctor
+```
+
+If the binary doesn't exist yet, run manual diagnostics:
+1. Check all hook handlers exist and are syntactically valid
+2. Verify `hooks/hooks.json` references real handler paths
+3. Check `data/sentinel-config.json` is valid JSON
+4. Check `.sentinel/` exists with expected subdirectories
+5. Report health: HEALTHY / DEGRADED / BROKEN per component
 
 ## Hook Handler Template
 

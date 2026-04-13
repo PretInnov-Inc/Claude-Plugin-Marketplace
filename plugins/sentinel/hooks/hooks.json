@@ -1,5 +1,5 @@
 {
-  "description": "Sentinel — 9-category unified intelligence. PreToolUse blocks security threats, PostToolUse tracks edits, SessionStart loads memory + output style, Stop extracts learnings.",
+  "description": "Sentinel v3 — 9 hooks across 6 lifecycle events. PreToolUse: security block + Layer-2 enforcement. PostToolUse: edit tracking + output compression. SessionStart: memory + style + lineage + design-system. PreCompact + PostCompact: lossless memory. Stop: session learning + lineage update. UserPromptSubmit: zero-token > routing.",
   "hooks": {
     "PreToolUse": [
       {
@@ -21,6 +21,11 @@
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks-handlers/post-edit-tracker.py\"",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks-handlers/output-compressor.py\"",
+            "timeout": 5
           }
         ]
       }
@@ -36,6 +41,11 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks-handlers/output-mode.sh\"",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks-handlers/lineage-manager.py\"",
             "timeout": 5
           }
         ]
@@ -71,6 +81,17 @@
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks-handlers/session-learn.py\"",
             "timeout": 15
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks-handlers/prompt-router.py\"",
+            "timeout": 3
           }
         ]
       }

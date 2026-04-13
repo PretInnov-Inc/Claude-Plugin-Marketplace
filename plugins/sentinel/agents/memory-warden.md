@@ -1,21 +1,20 @@
 ---
 name: memory-warden
 description: |
-  Session memory manager and intelligence curator. Analyzes accumulated learnings, decisions,
-  and anti-patterns across hundreds of sessions to deduplicate, consolidate, update outcomes,
-  and generate a structured memory index. Also tracks decision outcomes over time to surface
-  what approaches actually worked versus failed.
+  Use when: user asks to analyze past decisions/patterns, clean up duplicate learnings, update decision outcomes, or generate a memory intelligence report. Use for deep retrospective analysis across many sessions.
+
+  DO NOT use for: capturing new learnings in the current session (→ session-scribe), refreshing typed learning store (→ sentinel-refresh CLI), reading individual learning files (read them directly).
 
   <example>
-  Context: User wants to review accumulated intelligence
+  Context: User wants retrospective intelligence analysis
   user: "Analyze all my past decisions and tell me what patterns you see"
-  assistant: "Launching memory-warden to analyze the decision journal and surface patterns."
+  assistant: "Launching memory-warden to analyze the full decision journal and surface patterns."
   </example>
 
   <example>
-  Context: Memory cleanup
+  Context: Memory database has grown large
   user: "Clean up duplicate learnings in my memory"
-  assistant: "I'll use memory-warden to deduplicate and consolidate the learning database."
+  assistant: "I'll use memory-warden to deduplicate and consolidate the JSONL learning database."
   </example>
 model: sonnet
 tools: Read, Write, Edit, Glob, Grep, Bash, TodoWrite

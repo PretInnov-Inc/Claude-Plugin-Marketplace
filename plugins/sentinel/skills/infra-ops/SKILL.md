@@ -2,15 +2,16 @@
 name: infra-ops
 version: 2.0.0
 description: >-
-  Infrastructure and data engineering operations. Use when the user wants to build Airflow DAGs,
-  dbt models, data pipelines, warehouse queries, OpenLineage extractors, deploy Airflow, manage
-  Astronomer, track data lineage, profile tables, check data freshness, or instrument analytics
-  tracking. Consolidates data-engineering, product-tracking-skills plugins.
+  Use when: user wants to build Airflow DAGs, dbt models, data pipelines, warehouse queries,
+  profile tables, check data freshness, or instrument analytics tracking.
   Triggers on: "create a DAG", "airflow pipeline", "dbt model", "data pipeline", "warehouse query",
   "data lineage", "profile table", "check freshness", "product tracking", "tracking plan",
   "analytics event", "instrument tracking", "astro deploy", "cosmos dbt".
+  DO NOT trigger for: reviewing Python DAG code quality (→ sentinel), building web APIs (→ ai-forge),
+  querying Sentinel's own data (→ flow-memory).
 argument-hint: "[dag|dbt|pipeline|query|lineage|tracking|deploy|profile|freshness] [details]"
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash, TodoWrite, Agent
+execution_mode: direct
 ---
 
 # Sentinel Infra Ops — Infrastructure & Data Engineering

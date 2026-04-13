@@ -1,16 +1,19 @@
 ---
 name: flow-memory
-version: 2.0.0
+version: 3.0.0
 description: >-
-  Workflow intelligence and session memory. Use when the user asks about session history,
-  wants to view accumulated learnings, review past decisions, track a new decision, see
-  session health trends, clean up memories, or understand their working patterns.
-  Consolidates cortex, remember, ralph-loop into one unified memory system.
+  Use when: user asks about session history, accumulated learnings, past decisions, session health,
+  or wants to track/forget/query memory. Also use for lineage commands (rollover, resume) and
+  typed learning store queries (.sentinel/learnings/).
   Triggers on: "show my learnings", "what have you learned", "track this decision",
   "session history", "show decisions", "memory", "what patterns", "session health",
-  "forget this", "remember that", "log this decision", "productivity patterns".
-argument-hint: "[dashboard|decisions|learnings|health|add|forget] [details]"
+  "forget this", "remember that", "log this decision", "productivity patterns",
+  "rollover session", "resume session", "search learnings", "refresh learnings".
+  DO NOT trigger for: capturing a learning RIGHT NOW from conversation (→ session-scribe agent),
+  full retrospective analysis (→ memory-warden agent).
+argument-hint: "[dashboard|decisions|learnings|health|add|forget|rollover|search|refresh] [details]"
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash, TodoWrite, Agent
+execution_mode: direct
 ---
 
 # Sentinel Flow Memory — Workflow Intelligence
@@ -93,12 +96,31 @@ When user says "forget X" or `/sentinel:flow-memory forget X`:
 3. Rewrite the file excluding matched lines
 4. Report what was removed
 
+## Typed Learning Store (v3)
+
+`.sentinel/learnings/<category>/` holds structured Markdown learning files. Two tracks:
+- **knowledge** track: `applies_when` + `insight` fields — browsable best practices
+- **bug** track: `symptoms` + `root_cause` + `prevention` fields — error pattern library
+
+Commands:
+- `search [query]` → `grep -r "query" .sentinel/learnings/` then read top matches
+- `refresh` → Run `bin/sentinel-refresh` to apply 5-outcome maintenance (keep/update/consolidate/replace/delete)
+- `add knowledge [text]` → Write a new knowledge MD via `bin/sentinel-learn knowledge`
+- `add bug [symptom]` → Write a new bug MD via `bin/sentinel-learn bug`
+
+## Lineage Commands (v3)
+
+- `rollover` → Fork to new session: run `sentinel-status --trigger rollover`
+- `resume` → Print handoff context for next session: run `sentinel-status --trigger resume`
+- `lineage` → Show `.sentinel/lineage/<username>.json` ancestor chain
+
 ## Agent Delegation
 
 Launch `memory-warden` agent for:
 - Complex pattern analysis across hundreds of sessions
-- Deduplication and consolidation of similar learnings
+- Deduplication and consolidation of JSONL learnings
 - Generating a structured memory-index.md summary
 - Analyzing decision outcomes for systematic lessons
 
 For simple read/write operations (add, forget, show), do it directly without an agent.
+For typed store operations (search, refresh, add knowledge/bug), use CLI tools or grep directly.

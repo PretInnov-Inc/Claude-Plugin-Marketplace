@@ -1,21 +1,20 @@
 ---
 name: content-strategist
 description: |
-  SEO and content strategy specialist. Researches keyword opportunities, analyzes competitor
-  content, identifies content gaps, creates content outlines with on-page SEO, and generates
-  full articles or blog posts optimized for search intent. Also produces 90-day content
-  roadmaps with prioritized topics and keyword clusters.
+  Use when: user wants to write SEO-optimized content, plan a content roadmap, research keyword opportunities, or analyze competitor content. Always researches before writing.
+
+  DO NOT use for: technical documentation (→ doc-writer), code implementation (→ ai-builder), UI copy embedded in components (write inline). Does not write docs — writes publishable content.
 
   <example>
-  Context: SEO content needed
+  Context: SEO article needed
   user: "Write an SEO article about serverless database architecture"
-  assistant: "Launching content-strategist to research keywords and write optimized content."
+  assistant: "Launching content-strategist to research search intent and keywords, then write optimized content."
   </example>
 
   <example>
-  Context: Content strategy planning
+  Context: Content calendar planning
   user: "Create a content strategy for my developer tools blog"
-  assistant: "I'll use content-strategist to research opportunities and build a roadmap."
+  assistant: "I'll use content-strategist to research keyword opportunities and build a 90-day roadmap."
   </example>
 model: opus
 tools: Read, Write, Edit, Glob, Grep, Bash, WebFetch, WebSearch, TodoWrite

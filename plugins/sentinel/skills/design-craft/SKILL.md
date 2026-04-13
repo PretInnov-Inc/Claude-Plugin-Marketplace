@@ -1,15 +1,18 @@
 ---
 name: design-craft
-version: 2.0.0
+version: 3.0.0
 description: >-
-  Frontend design and UI implementation. Use when the user wants to build UI components,
-  design systems, layouts, landing pages, style guides, or brand-consistent interfaces.
-  Consolidates frontend-design, canvas-design, brand-guidelines, wordpress.com into one
-  design system. Triggers on: "design this UI", "build a component", "create landing page",
-  "design system", "style guide", "make it look good", "frontend design", "UI layout",
-  "brand guidelines", "color palette", "typography", "responsive design", "CSS component".
-argument-hint: "[component|layout|system|brand|page] [description]"
+  Use when: user wants to build UI components, design systems, layouts, landing pages, style guides,
+  brand-consistent interfaces, or manage the persistent design-system.md artifact.
+  Triggers on: "design this UI", "build a component", "create landing page", "design system",
+  "style guide", "make it look good", "frontend design", "UI layout", "brand guidelines",
+  "color palette", "typography", "responsive design", "CSS component", "extract design system",
+  "audit design drift", "update design-system.md", "critique this UI".
+  DO NOT trigger for: backend code (→ ai-builder), accessibility-only audits (→ browser-pilot --a11y),
+  reviewing code quality (→ sentinel-reviewer).
+argument-hint: "[component|layout|system|brand|page|extract|audit|critique] [description]"
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash, TodoWrite, Agent
+execution_mode: sequential
 ---
 
 # Sentinel Design Craft — Frontend Design & UI
@@ -27,14 +30,26 @@ You orchestrate frontend design from system-level architecture down to pixel-lev
 - `brand [description]` → Brand guidelines extraction/generation
 - `page [description]` → Full page implementation
 - `audit` → Audit existing UI for consistency, a11y, responsiveness
+- `extract` → Reverse-engineer `.sentinel/design-system.md` from existing code (see commands/extract.md)
+- `audit-design` → Check drift between spec and codebase (see commands/audit-design.md)
+- `critique` → Post-implementation critique against design-system.md (see commands/critique.md)
 
 **Implied from description (no scope needed):**
 - "landing page" → page
 - "design system" / "token" → system
 - "button" / "card" / "modal" / "nav" / "form" → component
 - "brand colors" / "typography" → brand
+- "extract design system" / "generate design-system.md" → extract
+- "check design drift" / "design consistency" → audit-design
+- "critique this component" / "post-build review" → critique
 
 ## Routing
+
+### Design System Commands (v3)
+
+- **extract** → Follow `commands/extract.md` — ui-architect analyzes, writes `.sentinel/design-system.md`
+- **audit-design** → Follow `commands/audit-design.md` — launch `design-auditor` agent  
+- **critique** → Follow `commands/critique.md` — launch `design-auditor` on just-implemented files
 
 ### Single Component
 Launch `style-writer` agent to:
@@ -74,6 +89,36 @@ Launch `ui-architect` to:
 - **System thinking** — every component uses design tokens, not raw values
 - **Consistency over creativity** — match existing patterns unless redesigning
 - **Performance** — minimize DOM depth, avoid layout-thrashing CSS
+
+## Design System Commands (v3)
+
+**extract** — Reverse-engineer `.sentinel/design-system.md` from existing code:
+```bash
+# Extract tokens, components, patterns from the codebase
+# Uses ui-architect to analyze, then writes .sentinel/design-system.md
+```
+
+**audit** — Check for design drift between `.sentinel/design-system.md` and current code:
+```bash
+# Compare documented tokens/patterns vs what's actually in the codebase
+# Reports: new undocumented patterns, deprecated patterns still in use
+```
+
+**critique** — Post-build critique of newly implemented UI against design-system.md:
+```bash
+# After style-writer implements components, compare against the spec
+# Reports: missing variants, accessibility gaps, token violations
+```
+
+Parse `extract|audit|critique` as scope alongside standard `component|layout|system|brand|page` scopes.
+
+## Design System Persistence
+
+`.sentinel/design-system.md` is the shared artifact between ui-architect ↔ style-writer across sessions.
+The lineage-manager.py hook loads it at SessionStart — so design context is always available.
+
+When any scope produces a design system definition: write it to `.sentinel/design-system.md`.
+When working with existing systems: read `.sentinel/design-system.md` first before reading code.
 
 ## Stack Detection
 

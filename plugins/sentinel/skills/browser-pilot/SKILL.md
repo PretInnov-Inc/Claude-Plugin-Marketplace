@@ -2,14 +2,15 @@
 name: browser-pilot
 version: 2.0.0
 description: >-
-  Browser automation and web testing. Use when the user wants to test a web app, automate
-  browser interactions, audit accessibility, check WCAG compliance, debug UI flows, take
-  screenshots, fill forms, test navigation, or verify visual behavior. Consolidates playwright,
-  chrome-devtools skills, and webapp-testing into one unified browser testing system.
+  Use when: user wants to test a live web app, automate browser interactions, audit accessibility,
+  take screenshots, or test user flows. Requires a running web server (localhost or URL).
   Triggers on: "test my web app", "automate browser", "check accessibility", "WCAG audit",
   "test the UI", "screenshot", "fill form", "test login flow", "a11y check", "browser test".
+  DO NOT trigger for: reviewing source code (→ sentinel), building UI (→ design-craft),
+  writing Playwright tests for CI (write them inline). Will fail if no server is running.
 argument-hint: "[url or description] [--a11y|--flow|--screenshot|--audit]"
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash, TodoWrite, Agent
+execution_mode: parallel
 ---
 
 # Sentinel Browser Pilot — Web Testing & Automation

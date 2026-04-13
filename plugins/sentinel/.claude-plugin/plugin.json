@@ -1,7 +1,7 @@
 {
   "name": "sentinel",
-  "description": "Sentinel — 9-category unified intelligence plugin. Consolidates code review, AI dev toolkit, output styles, browser testing, workflow memory, frontend design, documentation, infrastructure, and DX tools into one robust system.",
-  "version": "2.1.0",
+  "description": "Sentinel v3 — 9-category unified intelligence plugin. Code review, AI dev toolkit, output styles, browser testing, workflow memory, frontend design, documentation, infrastructure, and DX tools in one system.",
+  "version": "3.0.0",
   "homepage": "https://github.com/guptaji/autonomous/sentinel",
   "license": "MIT",
   "author": {
@@ -16,7 +16,8 @@
     "frontend-design", "ui-components", "design-system",
     "documentation", "seo", "content-strategy",
     "infrastructure", "data-engineering", "airflow",
-    "dx", "hooks", "claude-md", "automation"
+    "dx", "hooks", "claude-md", "automation",
+    "session-lineage", "typed-memory", "risk-gating", "token-compression"
   ],
   "userConfig": {
     "output_style": {
@@ -47,6 +48,44 @@
       "enum": ["A", "AA", "AAA"],
       "default": "AA",
       "description": "WCAG conformance level for accessibility audits"
+    },
+    "rollover_trigger": {
+      "type": "string",
+      "enum": ["manual", "graduated", "never"],
+      "default": "graduated",
+      "description": "Session fork strategy: graduated = warn 75% / offer 85% / auto-fork 95%; manual = only on >rollover; never = always compact"
+    },
+    "tdd_enforcement": {
+      "type": "string",
+      "enum": ["off", "warn", "block"],
+      "default": "off",
+      "description": "Test-first enforcement: off=disabled, warn=advisory message, block=hard PreToolUse gate on src/ writes without test/ sibling"
+    },
+    "blueprint_gate": {
+      "type": "string",
+      "enum": ["off", "warn", "block"],
+      "default": "warn",
+      "description": "Require ai-architect blueprint approval before ai-builder writes files"
+    },
+    "team_mode": {
+      "type": "boolean",
+      "default": false,
+      "description": "Team mode: lineage is per-user and gitignored; typed learnings are shared and committed"
+    },
+    "risk_gating": {
+      "type": "boolean",
+      "default": true,
+      "description": "Auto-classify diff risk tier (GREEN/YELLOW/RED/CRITICAL) before launching review agents — saves Opus tokens on trivial changes"
+    },
+    "compression_enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Enable PostToolUse output compression — debounced token saver, ~7k tokens/session"
+    },
+    "design_system_enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Load .sentinel/design-system.md at session start and detect UI drift on edits"
     }
   }
 }

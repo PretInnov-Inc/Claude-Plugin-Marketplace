@@ -39,7 +39,10 @@
     "content-strategist": {"enabled": true, "model": "opus"},
     "pipeline-builder":   {"enabled": true, "model": "sonnet"},
     "data-profiler":      {"enabled": true, "model": "haiku"},
-    "workspace-curator":  {"enabled": true, "model": "sonnet"}
+    "workspace-curator":  {"enabled": true, "model": "sonnet"},
+    "design-auditor":     {"enabled": true, "model": "haiku"},
+    "sentinel-auditor":   {"enabled": true, "model": "sonnet"},
+    "risk-gatekeeper":    {"enabled": true, "model": "opus"}
   },
 
   "review_modes": {
@@ -48,6 +51,34 @@
     "security": ["security-scanner", "error-auditor"],
     "quality":  ["sentinel-reviewer", "code-polisher"],
     "tests":    ["test-analyzer"]
+  },
+
+  "risk_gating": {
+    "enabled": true,
+    "auto_classify": true,
+    "tiers": {
+      "green": {
+        "description": "Trivial changes — no test/config/security/auth files, <30 lines",
+        "agents": ["sentinel-reviewer"],
+        "require_user_ack": false
+      },
+      "yellow": {
+        "description": "Standard changes — non-critical files, moderate scope",
+        "agents": ["sentinel-reviewer", "bug-hunter", "error-auditor"],
+        "require_user_ack": false
+      },
+      "red": {
+        "description": "High-risk — security/auth/config/API files or large diffs",
+        "agents": ["sentinel-reviewer", "bug-hunter", "error-auditor", "security-scanner", "test-analyzer"],
+        "require_user_ack": false
+      },
+      "critical": {
+        "description": "Critical — database migrations, CI/CD, secrets, or multiple high-risk signals",
+        "agents": ["sentinel-reviewer", "bug-hunter", "error-auditor", "security-scanner", "test-analyzer", "code-polisher"],
+        "require_user_ack": true,
+        "escalate_to": "risk-gatekeeper"
+      }
+    }
   },
 
   "output_style": {
@@ -62,13 +93,85 @@
     "max_decisions_in_context": 5,
     "max_anti_patterns_in_context": 8,
     "session_health_warn_below": 40,
-    "auto_extract_learnings": true
+    "auto_extract_learnings": true,
+    "typed_store": {
+      "enabled": true,
+      "path": ".sentinel/learnings/",
+      "categories": [
+        "build-errors",
+        "plugin-design",
+        "skill-authoring",
+        "security",
+        "workflow",
+        "testing",
+        "architecture",
+        "general"
+      ],
+      "refresh_interval_days": 14,
+      "autofix_safe_actions": true,
+      "grep_first_retrieval": true,
+      "max_files_to_full_read": 10
+    },
+    "lineage": {
+      "enabled": true,
+      "path": ".sentinel/lineage/",
+      "rollover_trigger": "graduated",
+      "stages": {
+        "warn_at_pct": 75,
+        "offer_at_pct": 85,
+        "hard_fork_at_pct": 95
+      },
+      "respect_busy_state": true,
+      "team_mode": "per_user"
+    }
+  },
+
+  "activation": {
+    "hard_gates_enabled": true,
+    "hard_hooks": {
+      "security_patterns": "block",
+      "tdd_enforcement": "off",
+      "blueprint_gate": "warn",
+      "destructive_commands": "block"
+    }
+  },
+
+  "compression": {
+    "enabled": true,
+    "threshold_chars": 3000,
+    "debounce_every_n_calls": 3,
+    "log_savings": true,
+    "savings_log": "data/compression.jsonl"
+  },
+
+  "prompt_routing": {
+    "enabled": true,
+    "prefix": ">",
+    "routes": {
+      "review":    "sentinel-status --trigger review",
+      "quick":     "sentinel-status --trigger quick",
+      "security":  "sentinel-status --trigger security",
+      "rollover":  "sentinel-status --trigger rollover",
+      "doctor":    "sentinel-doctor",
+      "refresh":   "sentinel-refresh --auto",
+      "resume":    "sentinel-status --trigger resume"
+    }
+  },
+
+  "design_system": {
+    "enabled": true,
+    "path": ".sentinel/design-system.md",
+    "auto_load_on_session_start": true,
+    "drift_detection": true,
+    "drift_check_on_ui_edit": true,
+    "ui_extensions": ["tsx", "jsx", "vue", "svelte"]
   },
 
   "ai_forge": {
     "research_before_build": true,
     "always_blueprint_first": true,
-    "validate_after_generate": true
+    "validate_after_generate": true,
+    "hard_gate_before_build": true
   },
 
   "browser": {

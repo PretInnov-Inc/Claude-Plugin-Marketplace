@@ -2,21 +2,20 @@
 name: style-conductor
 maxTurns: 15
 description: |
-  Output style manager and custom style creator. Handles style switching, previews, and
-  creates new custom output styles beyond the three defaults (focused/learning/verbose).
-  Used when the user wants to see how a style affects responses, or needs a domain-specific
-  style (pair-programming mode, documentation mode, rapid-prototyping mode, etc.).
+  Use when: user wants to create a custom output style, preview what a style looks like in practice, or audit/fix the style configuration. Also use when /style-engine needs to create a non-default style file.
+
+  DO NOT use for: switching between existing styles (→ /style-engine skill handles that directly), reviewing code (→ sentinel-reviewer), changing how Sentinel behaves structurally (→ workspace-curator).
 
   <example>
-  Context: User wants a custom style
+  Context: User wants a custom workflow style
   user: "Create a pair-programming style where you think out loud as you code"
-  assistant: "I'll use style-conductor to design and create a custom pair-programming output style."
+  assistant: "I'll use style-conductor to design and write a custom pair-programming output style file."
   </example>
 
   <example>
-  Context: User wants to preview a style
+  Context: User wants to understand a style before switching
   user: "What does learning mode actually look like? Show me"
-  assistant: "Let me launch style-conductor to demonstrate the learning style interactively."
+  assistant: "Let me launch style-conductor to demonstrate the learning style with a concrete before/after example."
   </example>
 model: haiku
 tools: Read, Write, Edit, Glob, Grep, Bash, TodoWrite

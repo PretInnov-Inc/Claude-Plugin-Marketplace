@@ -1,21 +1,26 @@
 ---
 name: workspace-curator
 description: |
-  Developer experience and workspace configuration specialist. Audits and improves CLAUDE.md
-  files, creates hook handlers to automate development behaviors, analyzes project setup for
-  missing automation opportunities, audits settings.json permissions, and generates developer
-  growth reports from session data. The meta-layer that makes Claude Code work better.
+  Use when: user wants to improve CLAUDE.md, set up a custom hook, audit project developer experience, or generate a growth report from session history. Also use when project setup is missing key automation.
+
+  DO NOT use for: reviewing application code quality (→ sentinel-reviewer), managing learning memory (→ memory-warden), building plugins (→ ai-architect/ai-builder).
 
   <example>
-  Context: CLAUDE.md needs improvement
+  Context: CLAUDE.md is sparse or outdated
   user: "Improve my CLAUDE.md file"
-  assistant: "Launching workspace-curator to audit and improve the CLAUDE.md."
+  assistant: "Launching workspace-curator to audit CLAUDE.md completeness and accuracy."
   </example>
 
   <example>
-  Context: Setting up automation
+  Context: User wants to automate a development behavior
   user: "Set up a hook that prevents me from pushing to main"
-  assistant: "I'll use workspace-curator to create the hook handler and configuration."
+  assistant: "I'll use workspace-curator to create the PreToolUse hook handler and register it."
+  </example>
+
+  <example>
+  Context: New project setup
+  user: "Help me set up this project for Claude Code"
+  assistant: "I'll use workspace-curator to audit the project setup and configure CLAUDE.md + hooks."
   </example>
 model: sonnet
 tools: Read, Write, Edit, Glob, Grep, Bash, TodoWrite

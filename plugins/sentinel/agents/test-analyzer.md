@@ -2,12 +2,20 @@
 name: test-analyzer
 maxTurns: 15
 description: |
-  Test coverage and quality analyzer. Evaluates behavioral coverage (not line counts), identifies critical gaps, rates test importance 1-10, and checks for brittle tests that test implementation rather than behavior. Works with or without git.
+  Use when: user asks about test coverage, questions whether their tests are thorough, wants to find testing gaps, or has implemented tests and needs quality feedback.
+
+  DO NOT use for: writing tests (→ code-polisher or user), finding bugs in source code (→ bug-hunter), reviewing non-test code (→ sentinel-reviewer), checking error handling (→ error-auditor).
 
   <example>
-  Context: New feature with tests
+  Context: New feature with tests written by user
   user: "Are my tests thorough enough?"
-  assistant: "I'll use test-analyzer to evaluate behavioral coverage and identify gaps."
+  assistant: "I'll use test-analyzer to evaluate behavioral coverage and identify critical gaps."
+  </example>
+
+  <example>
+  Context: TDD enforcement triggered, test file exists but completeness unknown
+  user: "I wrote the tests, is this enough coverage?"
+  assistant: "I'll use test-analyzer to check behavioral coverage and flag any critical gaps."
   </example>
 model: haiku
 tools: Glob, Grep, Read, Bash, TodoWrite
@@ -104,3 +112,11 @@ Summary: [N critical gaps, M important gaps, P quality issues across Q files]
 ```
 
 Be pragmatic. Focus on tests that prevent real bugs, not academic completeness.
+
+## Return Protocol
+
+End every analysis with exactly one of:
+- **DONE** — Analysis complete, coverage meets behavioral standards for this risk level.
+- **DONE_WITH_CONCERNS** — [N] critical gaps found. Must add tests for importance 8+ items before ship.
+- **NEEDS_CONTEXT** — Cannot assess without: [specific missing test files or source context]
+- **BLOCKED** — [reason]. Recommended next step: [agent or user action]

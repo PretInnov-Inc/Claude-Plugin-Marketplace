@@ -1,0 +1,100 @@
+# Sentinel v3 — Typed Learning Store Schema
+# Every file in .sentinel/learnings/<category>/ must follow this frontmatter spec.
+# Two tracks: bug (for error patterns) and knowledge (for insights/decisions).
+# Use grep-first retrieval: scan frontmatter only, full-read only top matches.
+
+version: "1.0"
+
+categories:
+  - build-errors       # Hook handler failures, stdlib violations, JSON parse errors
+  - plugin-design      # Architecture decisions, component choices, plugin patterns
+  - skill-authoring    # Skill description rules, trigger phrases, frontmatter gotchas
+  - security           # Vulnerability patterns, blocked edits, security decisions
+  - workflow           # Session patterns, team conventions, process learnings
+  - testing            # Test coverage gaps, brittle test patterns, testing strategies
+  - architecture       # System design, technology choices, trade-offs
+  - general            # Uncategorized learnings
+
+tracks:
+  bug:
+    description: "Error patterns, failures, things that caused problems"
+    required_fields:
+      - symptoms          # What did it look like when it happened?
+      - root_cause        # Why did it happen?
+      - resolution_type   # fixed | workaround | deferred | known-limitation
+      - prevention        # What prevents recurrence?
+    optional_fields:
+      - affected_files
+      - error_message
+
+  knowledge:
+    description: "Insights, decisions, best practices, things that worked"
+    required_fields:
+      - applies_when      # Under what conditions is this useful?
+      - insight           # The core insight in one sentence
+    optional_fields:
+      - rationale
+      - examples
+      - references
+
+frontmatter_template_bug: |
+  ---
+  title: "<slug description of the problem>"
+  track: bug
+  category: <category>
+  severity: critical | high | medium | low
+  tags: [tag1, tag2]
+  session_id: <session-id>
+  date: <YYYY-MM-DD>
+  status: active | stale | resolved
+  symptoms: "<what it looked like>"
+  root_cause: "<why it happened>"
+  resolution_type: fixed | workaround | deferred | known-limitation
+  prevention: "<how to prevent>"
+  ---
+
+  ## Detail
+
+  <full description, code snippets, context>
+
+frontmatter_template_knowledge: |
+  ---
+  title: "<slug description of the insight>"
+  track: knowledge
+  category: <category>
+  tags: [tag1, tag2]
+  session_id: <session-id>
+  date: <YYYY-MM-DD>
+  status: active | stale
+  applies_when: "<trigger condition>"
+  insight: "<the core learning in one sentence>"
+  ---
+
+  ## Detail
+
+  <full context, rationale, examples>
+
+retrieval_rules:
+  grep_first:
+    - "title:.*{query}"
+    - "tags:.*{tag}"
+    - "category:.*{category}"
+    - "applies_when:.*{keyword}"
+  score_threshold: 0.6
+  max_full_reads: 10
+  read_frontmatter_lines: 30
+
+maintenance:
+  refresh_outcomes:
+    keep: "Still relevant and accurate"
+    update: "Core fact correct but details changed"
+    consolidate: "Duplicate of another entry — merge into canonical"
+    replace: "Old approach deprecated — supersede with new entry"
+    delete: "No longer accurate; git history is the archive"
+  autofix_safe:
+    - keep
+    - update_status_to_stale
+  autofix_requires_review:
+    - consolidate
+    - replace
+    - delete

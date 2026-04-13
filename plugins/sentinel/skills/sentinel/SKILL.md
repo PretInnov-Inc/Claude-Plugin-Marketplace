@@ -1,9 +1,16 @@
 ---
 name: sentinel
-version: 2.1.0
-description: "Unified code review engine. Use when the user asks to review code, check quality, find bugs, audit security, or verify changes. Works with or without git. Auto-detects scope from git diff or session edit tracking."
+version: 3.0.0
+description: >-
+  Use when: user asks to review code, check quality, find bugs, audit security, verify changes before committing,
+  or run any code quality check. Works with or without git. Auto-detects scope.
+  Triggers on: "review my code", "check my changes", "find bugs", "audit security", "run sentinel",
+  "is this safe to commit", "check quality", "run a review", "quick check".
+  DO NOT trigger for: reviewing plugin structure (→ ai-validator), style preferences (→ style-engine),
+  memory/history questions (→ flow-memory).
 argument-hint: "[full|quick|security|quality|tests|<file-path>]"
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash, TodoWrite, Agent
+execution_mode: parallel
 ---
 
 # Sentinel — Unified Code Review Engine
@@ -55,11 +62,20 @@ The confidence threshold starts at 80 and adapts:
 
 ## Hooks (Always Active)
 
-- **PreToolUse**: Blocks edits containing security vulnerability patterns (16 patterns)
-- **PostToolUse**: Tracks all edits for scope detection and risk classification
+- **PreToolUse**: Layer 1 security patterns + Layer 2 operational gates (TDD, blueprint, destructive commands)
+- **PostToolUse**: Edit tracking + output compression
+- **SessionStart**: Memory injection + lineage + design-system loading
+- **PreCompact/PostCompact**: Lossless learning preservation
+- **Stop**: Typed MD learning extraction + lineage update
+- **UserPromptSubmit**: Zero-token `>` shortcut routing
 
 ## Data Files
 
 - `edit-log.jsonl` — Edit tracking log (the non-git diff)
-- `sentinel-config.json` — Thresholds, agent config, review modes
+- `sentinel-config.json` — Thresholds, agent config, review modes, activation gates
 - `security-patterns.json` — Extensible security pattern library
+
+## Risk Tiers (v3)
+
+Sentinel auto-classifies each review into GREEN / YELLOW / RED / CRITICAL and routes to the
+appropriate agent roster per `sentinel-config.json` risk_gating configuration.

@@ -1,8 +1,27 @@
-# Sentinel — 9-Category Unified Intelligence for Claude Code
+# Sentinel v3 — 9-Category Unified Intelligence for Claude Code
 
 > **One plugin to rule them all.**
 >
 > By Siddharth Gupta | [PretInnov Technologies](https://github.com/PretInnov-Inc)
+
+---
+
+## What's New in v3
+
+Sentinel v3 is a major upgrade built from synthesizing 8 external plugins:
+
+| v3 Feature | What It Does |
+|-----------|--------------|
+| **Typed Learning Store** | `.sentinel/learnings/<category>/` — structured Markdown with grep-first retrieval. Two tracks: `knowledge` (insights) and `bug` (error patterns). |
+| **Session Lineage** | Per-user `.sentinel/lineage/<user>.json` chains sessions for ancestor context. Graduated rollover at 75%/85%/95% context. |
+| **Layer 2 Hard Gates** | Beyond security: TDD enforcement, blueprint gate, destructive command blocking — all configurable `block`/`warn`/`off`. |
+| **Risk-Tier Classification** | GREEN/YELLOW/RED/CRITICAL auto-routing with `risk-gatekeeper` (Opus) for CRITICAL tier escalation. |
+| **Design System Persistence** | `.sentinel/design-system.md` binds ui-architect ↔ style-writer across sessions. Drift detection via `design-auditor`. |
+| **Output Compressor** | Debounced PostToolUse compression of large outputs (JSON/HTML/log/generic) — ~7k tokens/session saved. |
+| **Zero-Token Routing** | `>review`, `>rollover`, `>doctor` shortcuts via UserPromptSubmit hook. No LLM cost. |
+| **3 New Agents** | `design-auditor`, `sentinel-auditor` (120-point rubric), `risk-gatekeeper` |
+| **3 New CLIs** | `sentinel-doctor` (health), `sentinel-refresh` (maintenance), `sentinel-learn` (manual entry) |
+| **"When not What" Agents** | All 24 agent descriptions rewritten as trigger conditions — eliminates routing misfires. |
 
 ---
 
@@ -12,7 +31,7 @@ Most Claude Code setups end up with 15-40 plugins installed — each doing one t
 
 **Sentinel replaces all of that with one unified system.**
 
-Sentinel consolidates 40+ standalone plugins into 9 organized categories, with 21 specialized agents, 9 slash-command skills, 6 lifecycle hooks, 3 CLI tools, and 3 output styles — all sharing one data store, one config file, and one coherent architecture.
+Sentinel consolidates 40+ standalone plugins into 9 organized categories, with 24 specialized agents, 11 slash-command skills, 7 lifecycle hooks, 6 CLI tools, and 3 output styles — all sharing one data store, one config file, and one coherent architecture.
 
 ### The 9 Categories
 
@@ -51,7 +70,7 @@ claude --plugin-dir ./forge-marketplace/plugins/sentinel
 
 ### After Installing
 
-Run the install script to validate all 57 components:
+Run the install script to validate all v3 components:
 ```bash
 bash sentinel/scripts/install.sh
 ```
@@ -60,13 +79,21 @@ You should see:
 ```
 Status: SUCCESS - all components validated
 
-  21 Agents     - sentinel-reviewer, bug-hunter, security-scanner, + 18 more
-   9 Skills     - sentinel, ai-forge, browser-pilot, design-craft, doc-engine,
-                  dx-meta, flow-memory, infra-ops, style-engine
+  24 Agents     - sentinel-reviewer, bug-hunter, security-scanner, design-auditor,
+                  sentinel-auditor, risk-gatekeeper, + 18 more
+  11 Skills     - sentinel, ai-forge, browser-pilot, design-craft, doc-engine,
+                  dx-meta, flow-memory, infra-ops, style-engine,
+                  sentinel-doctor, sentinel-audit
    2 Commands   - review, quick-check
-   6 Hook Events - PreToolUse, PostToolUse, SessionStart, PreCompact, PostCompact, Stop
+   7 Hook Events - PreToolUse, PostToolUse, SessionStart, PreCompact, PostCompact, Stop, UserPromptSubmit
    3 Output Styles - focused, learning, verbose
-   3 CLI Tools  - sentinel-status, sentinel-report, sentinel-reset
+   6 CLI Tools  - sentinel-status, sentinel-report, sentinel-reset,
+                  sentinel-doctor, sentinel-refresh, sentinel-learn
+```
+
+Then run a health check:
+```bash
+sentinel-doctor --quick
 ```
 
 ---
@@ -444,7 +471,7 @@ Add your own patterns by editing `data/security-patterns.json`.
 
 ---
 
-## The 21 Agents
+## The 24 Agents
 
 | Agent | Model | Category | Role | Can Write? |
 |-------|-------|----------|------|-----------|
@@ -454,8 +481,8 @@ Add your own patterns by editing `data/security-patterns.json`.
 | security-scanner | Opus | B | OWASP Top 10, trust boundary analysis | No |
 | test-analyzer | Haiku | B | Behavioral test coverage gaps | No |
 | code-polisher | Haiku | B | Post-review simplification | Yes |
-| ai-architect | Opus | A | Plugin/agent system design | No |
-| ai-builder | Sonnet | A | Implementation engine | Yes |
+| ai-architect | Opus | A | Plugin/agent system design (HARD-GATE approval) | No |
+| ai-builder | Sonnet | A | Implementation engine (blueprint gate enforced) | Yes |
 | ai-validator | Haiku | A | Structure validation | No |
 | style-conductor | Haiku | C | Output style management + custom styles | Yes |
 | style-writer | Sonnet | F | Frontend UI implementation | Yes |
@@ -469,11 +496,14 @@ Add your own patterns by editing `data/security-patterns.json`.
 | content-strategist | Opus | G | SEO + content strategy | Yes |
 | data-profiler | Haiku | G/H | Data quality + tracking plans | Yes |
 | pipeline-builder | Sonnet | H | Airflow DAGs + dbt models | Yes |
+| design-auditor | Haiku | F | UI drift detection vs `.sentinel/design-system.md` | No |
+| sentinel-auditor | Sonnet | Meta | 120-point rubric for agents/skills/hooks quality | No |
+| risk-gatekeeper | Opus | Meta | 5-axis risk matrix + CRITICAL tier hard human gate | No |
 
 **Model tiers:**
-- **Opus** (4 agents) — Deep reasoning for critical analysis (bugs, security, architecture, content strategy)
-- **Sonnet** (10 agents) — Balanced reasoning for implementation and review
-- **Haiku** (7 agents) — Fast execution for frequent/simple tasks (all have `maxTurns` limits)
+- **Opus** (5 agents) — Deep reasoning for critical analysis (bugs, security, architecture, content strategy, risk assessment)
+- **Sonnet** (11 agents) — Balanced reasoning for implementation and review
+- **Haiku** (8 agents) — Fast execution for frequent/simple tasks (all have `maxTurns` limits)
 
 ---
 
@@ -562,10 +592,18 @@ Sentinel works standalone or alongside the other marketplace plugins:
 | **Sentinel + Clamper** | Sentinel blocks dangerous edits before they happen (PreToolUse), Clamper verifies code quality after (verification loop). Sentinel reviews code, Clamper maps project DNA. |
 | **Sentinel + Cortex** | Both track session intelligence. Sentinel focuses on code review learnings and health scores. Cortex focuses on cross-project patterns and self-evolution. |
 | **Sentinel + Forge** | Sentinel's `ai-architect`/`ai-builder`/`ai-validator` agents power the same pipeline Forge uses. Use `/sentinel:ai-forge` for integrated builds or `/forge` for the standalone pipeline. |
+| **Sentinel + codebase-radar** | `radar-explorer` pairs naturally with `sentinel-reviewer` for architectural review — semantic search surfaces the right code context before review agents analyze it. Reduces token burn on large codebases by 40-60%. |
 
 ---
 
 ## Troubleshooting
+
+**First stop: run `sentinel-doctor`**
+```bash
+sentinel-doctor        # Full diagnostic
+sentinel-doctor --quick  # 30-second check
+```
+Or via skill: `/sentinel:dx-meta sentinel-doctor`
 
 **"No files to review" when I run /sentinel**
 - In a git repo: make sure you have uncommitted changes (`git diff` must show something)
@@ -574,22 +612,41 @@ Sentinel works standalone or alongside the other marketplace plugins:
 
 **"Session memory seems empty"**
 - Memory accumulates over sessions. First session will have nothing.
-- Run `sentinel-status` to check if data files have content
-- Ensure `memory_enabled` is `true` in config
+- Run `sentinel-doctor --data` to check if data files have content
+- JSONL store: `data/learnings.jsonl`; Typed store: `.sentinel/learnings/`
 
 **"Security hook keeps blocking my edit"**
 - The block is intentional for critical/high severity patterns
 - Review the pattern: check `data/security-patterns.json`
 - If it's a false positive, disable that specific pattern (`"enabled": false`)
+- Check Layer 2 gates: `activation.hard_hooks` in `sentinel-config.json`
+
+**"TDD gate is blocking me"**
+- Set `tdd_enforcement` to `"warn"` in `sentinel-config.json` to get warnings instead of blocks
+- Or set to `"off"` to disable
+
+**"Blueprint gate is blocking my ai-builder"**
+- Create `.sentinel/blueprints/` directory and save an approved blueprint there
+- Or set `blueprint_gate` to `"off"` in config
 
 **"Churn warning is annoying"**
 - Increase the threshold: edit `data/sentinel-config.json`, set `churn_threshold` to 8 or 10
-- Or via userConfig: `churn_threshold: 10`
 
 **"Output style didn't change"**
 - Style changes take effect on the NEXT session start
 - The SessionStart hook reads the config and injects the style
 - Run `/restart` or start a new session
+
+**"How do I use the `>` shortcuts?"**
+- Type `>review`, `>rollover`, `>doctor`, `>refresh`, `>resume`, `>quick`, or `>security`
+- These are intercepted by the UserPromptSubmit hook before reaching the LLM
+- Zero token cost — pure routing
+
+**"Typed learning store is empty"**
+- It's auto-populated on every Stop/PreCompact hook
+- Manually add entries: `sentinel-learn knowledge "your insight"`
+- Or run `/flow-memory add knowledge [text]`
+- Run maintenance: `sentinel-refresh --auto`
 
 ---
 

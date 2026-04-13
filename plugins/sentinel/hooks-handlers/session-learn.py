@@ -1,18 +1,22 @@
 #!/usr/bin/env python3
 """
-Sentinel Stop Hook — Session Learning Extractor (Category E)
+Sentinel Stop + PreCompact Hook — Session Learning Extractor (v3)
 
-Fires when Claude finishes responding. Analyzes the session transcript
-to extract:
+Fires when Claude finishes responding (Stop) and before context compaction (PreCompact).
+Analyzes the session transcript to extract:
   1. Learnings — what worked, what to remember
   2. Anti-patterns — what to avoid in future sessions
   3. Decisions — architectural or technology choices made
   4. Session health score — composite quality metric
 
-Writes all extracted data to sentinel/data/ JSONL files for future
-session context injection (session-memory.sh reads these on next start).
+Writes extracted data to TWO stores:
+  A. JSONL flat files in sentinel/data/ → fast machine reading (session-memory.sh)
+  B. Typed Markdown in .sentinel/learnings/<category>/ → structured, human-readable,
+     grep-first retrieval (per learnings-schema.yaml)
 
-This is the primary learning loop that makes Sentinel smarter over time.
+Also updates .sentinel/lineage/<username>.json with stop event so rollover can
+read the ancestor chain.
+
 Pure stdlib — no pip dependencies.
 """
 
@@ -36,6 +40,19 @@ def get_data_dir():
 
 def now_iso():
     return datetime.now(timezone.utc).isoformat()
+
+
+def now_date():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+def slugify(text: str, max_len: int = 40) -> str:
+    """Convert text to a URL-safe slug."""
+    text = text.lower()
+    text = re.sub(r"[^\w\s-]", "", text)
+    text = re.sub(r"[\s_]+", "-", text)
+    text = text.strip("-")
+    return text[:max_len]
 
 
 def append_jsonl(path: Path, record: dict):
@@ -63,7 +80,6 @@ def read_transcript(transcript_path: str, max_chars: int = 20000) -> str:
     try:
         with open(transcript_path, "r", encoding="utf-8", errors="replace") as f:
             content = f.read()
-        # Take last max_chars for efficiency
         return content[-max_chars:]
     except Exception:
         return ""
@@ -127,38 +143,34 @@ def extract_decisions(transcript: str) -> list:
             clean = match.strip()[:150]
             if len(clean) > 20:
                 decisions.append(clean)
-    return decisions[:3]  # Cap at 3 per session
+    return decisions[:3]
 
 
 def calculate_health_score(transcript: str, errors: list, edit_log_path: Path, session_id: str) -> int:
     """
     Composite session health score (0-100):
+    - Baseline: 20
     - Errors detected: -5 each (max -30)
     - Session length (reasonable work done): +20
     - Successful tool use (Edit/Write in transcript): +20
-    - No repeated failures: +20
-    - Coherent conversation (no confusion signals): +20
-    - Baseline: 20
+    - No confusion signals: +20 possible; confusion_count * -5
+    - Churn from edit log: -10 per churn event (max -20)
     """
     score = 20
 
-    # Penalize errors
     error_penalty = min(len(errors) * 5, 30)
     score -= error_penalty
 
-    # Reward productive session (length of transcript = work done)
     if len(transcript) > 3000:
         score += 20
     elif len(transcript) > 1000:
         score += 10
 
-    # Reward tool use (edits happened)
     if re.search(r'"tool":\s*"(?:Edit|Write|MultiEdit)"', transcript):
         score += 20
     elif "Edit" in transcript or "Write" in transcript:
         score += 10
 
-    # Penalize confusion signals
     confusion_patterns = [
         r"I(?:'m| am) not sure",
         r"I don't (?:know|understand)",
@@ -170,7 +182,6 @@ def calculate_health_score(transcript: str, errors: list, edit_log_path: Path, s
     confusion_count = sum(1 for p in confusion_patterns if re.search(p, transcript, re.IGNORECASE))
     score -= min(confusion_count * 5, 20)
 
-    # Check edit log for churn (repeated edits = problem)
     if edit_log_path.exists():
         try:
             with open(edit_log_path) as f:
@@ -181,7 +192,7 @@ def calculate_health_score(transcript: str, errors: list, edit_log_path: Path, s
         except Exception:
             pass
     else:
-        score += 20  # No churn data = no penalty
+        score += 20
 
     return max(0, min(100, score))
 
@@ -189,42 +200,191 @@ def calculate_health_score(transcript: str, errors: list, edit_log_path: Path, s
 def extract_learnings_from_transcript(transcript: str, technologies: list) -> list:
     """
     Extract specific, actionable learnings from the transcript.
-    Looks for:
-    - Explicit "remember" / "note that" / "important:" patterns
-    - Successful approaches that could repeat
-    - Fixed mistakes
+    Returns list of dicts with category, learning, confidence, and inferred track metadata.
     """
     learnings = []
 
-    # Pattern: explicit learning markers
     explicit_patterns = [
-        (r"(?:remember|note that|important):\s*(.{20,200}?)(?:\n|$)", "explicit"),
-        (r"(?:the (?:key|trick|gotcha|issue|problem) (?:is|was)):\s*(.{20,200}?)(?:\n|$)", "insight"),
-        (r"(?:this works because|the reason this works):\s*(.{20,200}?)(?:\n|$)", "insight"),
+        (r"(?:remember|note that|important):\s*(.{20,200}?)(?:\n|$)", "workflow"),
+        (r"(?:the (?:key|trick|gotcha|issue|problem) (?:is|was)):\s*(.{20,200}?)(?:\n|$)", "general"),
+        (r"(?:this works because|the reason this works):\s*(.{20,200}?)(?:\n|$)", "general"),
     ]
-    for pattern, cat in explicit_patterns:
+    for pattern, category in explicit_patterns:
         matches = re.findall(pattern, transcript, re.IGNORECASE)
         for match in matches[:2]:
             clean = match.strip()[:180]
             if len(clean) > 25:
-                learnings.append({"category": cat, "learning": clean, "confidence": "high"})
+                learnings.append({"category": category, "learning": clean, "confidence": "high"})
 
-    # Tech-specific learnings
     if "airflow" in technologies:
         learnings.append({
-            "category": "airflow",
+            "category": "architecture",
             "learning": f"Session worked with Airflow ({', '.join(t for t in technologies if t in ['python', 'airflow'])}). Check DAG structure and test before deploy.",
             "confidence": "medium"
         })
 
     if "claude-api" in technologies:
         learnings.append({
-            "category": "ai-development",
+            "category": "plugin-design",
             "learning": "Session involved Claude API / Agent SDK work. Validate tool schemas and test streaming responses.",
             "confidence": "medium"
         })
 
-    return learnings[:5]  # Cap per session
+    return learnings[:5]
+
+
+# ─── Typed Markdown Store ─────────────────────────────────────────────────────
+
+VALID_CATEGORIES = {
+    "build-errors", "plugin-design", "skill-authoring", "security",
+    "workflow", "testing", "architecture", "general"
+}
+
+CATEGORY_ALIASES = {
+    "airflow": "architecture",
+    "ai-development": "plugin-design",
+    "explicit": "workflow",
+    "insight": "general",
+    "error": "build-errors",
+    "failure": "build-errors",
+    "traceback": "build-errors",
+    "python-error": "build-errors",
+    "js-error": "build-errors",
+}
+
+
+def normalize_category(raw: str) -> str:
+    if raw in VALID_CATEGORIES:
+        return raw
+    return CATEGORY_ALIASES.get(raw, "general")
+
+
+def write_knowledge_md(learning: dict, session_id: str, date_str: str):
+    """
+    Write a typed knowledge learning to .sentinel/learnings/<category>/<slug>-<date>.md
+    Only writes if the learning is high-confidence or clearly categorizable.
+    """
+    category = normalize_category(learning.get("category", "general"))
+    text = learning.get("learning", "").strip()
+    confidence = learning.get("confidence", "medium")
+
+    if len(text) < 20:
+        return
+
+    # Derive applies_when from text heuristic
+    applies_when = "When working on " + category + " tasks"
+    if confidence == "high":
+        applies_when = "Always — explicitly flagged during session"
+
+    title = slugify(text[:50])
+    filename = f"{title}-{date_str}.md"
+    out_dir = Path(".sentinel") / "learnings" / category
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / filename
+
+    # Skip if an identical slug already exists for today
+    if out_path.exists():
+        return
+
+    content = f"""---
+title: "{text[:60].replace('"', "'")}"
+track: knowledge
+category: {category}
+tags: [{category}, auto-extracted]
+session_id: {session_id}
+date: {date_str}
+status: active
+applies_when: "{applies_when}"
+insight: "{text[:100].replace('"', "'")}"
+---
+
+## Detail
+
+{text}
+
+*Auto-extracted from session {session_id} with confidence={confidence}.*
+"""
+    try:
+        out_path.write_text(content, encoding="utf-8")
+    except Exception:
+        pass
+
+
+def write_bug_md(error: dict, session_id: str, date_str: str):
+    """
+    Write a typed bug learning to .sentinel/learnings/build-errors/<slug>-<date>.md
+    """
+    detail = error.get("detail", "").strip()
+    error_type = error.get("type", "error")
+    if len(detail) < 15:
+        return
+
+    title = slugify(detail[:50])
+    filename = f"bug-{title}-{date_str}.md"
+    out_dir = Path(".sentinel") / "learnings" / "build-errors"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / filename
+
+    if out_path.exists():
+        return
+
+    content = f"""---
+title: "{detail[:60].replace('"', "'")}"
+track: bug
+category: build-errors
+severity: medium
+tags: [build-errors, {error_type}, auto-extracted]
+session_id: {session_id}
+date: {date_str}
+status: active
+symptoms: "{detail[:100].replace('"', "'")}"
+root_cause: "Unknown — auto-detected from error output"
+resolution_type: deferred
+prevention: "Investigate root cause and add prevention rule"
+---
+
+## Detail
+
+Error type: `{error_type}`
+Observed: {detail}
+
+*Auto-extracted from session {session_id}. Review and update root_cause + prevention fields.*
+"""
+    try:
+        out_path.write_text(content, encoding="utf-8")
+    except Exception:
+        pass
+
+
+# ─── Lineage Update ───────────────────────────────────────────────────────────
+
+def update_lineage_stop(session_id: str, ts: str, transcript_path: str, health_score: int):
+    """
+    Record stop event in .sentinel/lineage/<username>.json so rollover knows
+    where to find the raw transcript for ancestor reads.
+    """
+    try:
+        username = os.environ.get("USER", os.environ.get("USERNAME", "default"))
+        lineage_dir = Path(".sentinel") / "lineage"
+        lineage_dir.mkdir(parents=True, exist_ok=True)
+        lineage_path = lineage_dir / f"{username}.json"
+
+        if lineage_path.exists():
+            try:
+                lineage = json.loads(lineage_path.read_text())
+            except Exception:
+                lineage = {"current_session": None, "ancestors": []}
+        else:
+            lineage = {"current_session": None, "ancestors": []}
+
+        lineage["last_stop"] = ts
+        lineage["last_health"] = health_score
+        if transcript_path:
+            lineage["last_transcript"] = transcript_path
+
+        lineage_path.write_text(json.dumps(lineage, indent=2, ensure_ascii=False))
+    except Exception:
+        pass
 
 
 def main():
@@ -256,8 +416,10 @@ def main():
     health_score = calculate_health_score(transcript, errors, edit_log_path, session_id)
 
     ts = now_iso()
+    date_str = now_date()
 
-    # Write session stop record
+    # ── Store A: JSONL flat files (fast machine reading) ──────────────────────
+
     append_jsonl(session_log_path, {
         "event": "session_stop",
         "session_id": session_id,
@@ -269,7 +431,6 @@ def main():
         "timestamp": ts
     })
 
-    # Write learnings
     for learning in learnings:
         append_jsonl(learnings_path, {
             **learning,
@@ -277,7 +438,6 @@ def main():
             "timestamp": ts
         })
 
-    # Write error-based anti-patterns
     for error in errors[:2]:
         if error["type"] in ("error", "failure"):
             append_jsonl(anti_patterns_path, {
@@ -288,7 +448,6 @@ def main():
                 "timestamp": ts
             })
 
-    # Write decisions
     decisions_path = data_dir / "decisions.jsonl"
     for decision in decisions:
         append_jsonl(decisions_path, {
@@ -299,11 +458,27 @@ def main():
             "timestamp": ts
         })
 
-    # Trim files to prevent unbounded growth
     for path in [learnings_path, anti_patterns_path, session_log_path, decisions_path]:
         trim_jsonl(path)
 
-    # Output health warning if very low
+    # ── Store B: Typed Markdown (grep-first retrieval) ────────────────────────
+    # Only write if there's a real project context (CWD has .sentinel or src/)
+    cwd = Path.cwd()
+    has_sentinel = (cwd / ".sentinel").exists()
+    has_src = (cwd / "src").exists() or (cwd / "lib").exists()
+
+    if has_sentinel or has_src:
+        for learning in learnings:
+            write_knowledge_md(learning, session_id, date_str)
+
+        for error in errors[:3]:
+            if error["type"] in ("error", "failure", "traceback", "python-error", "js-error"):
+                write_bug_md(error, session_id, date_str)
+
+    # ── Lineage: record stop event ────────────────────────────────────────────
+    update_lineage_stop(session_id, ts, transcript_path, health_score)
+
+    # ── Output: health warning if very low ────────────────────────────────────
     if health_score < 40:
         print(json.dumps({
             "systemMessage": (

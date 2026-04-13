@@ -448,7 +448,7 @@ forge-inspect validate ./my-plugin  # Quick validation
 
 ## Part of the PretInnov Plugin Ecosystem
 
-Forge is one of 4 plugins in the [PretInnov Marketplace](../../README.md):
+Forge is one of 5 plugins in the [PretInnov Marketplace](../../README.md):
 
 | Plugin | What It Does |
 |--------|-------------|
@@ -456,8 +456,11 @@ Forge is one of 4 plugins in the [PretInnov Marketplace](../../README.md):
 | **[Clamper](../clamper/README.md)** | Code verification, project DNA, ecosystem scaffolding |
 | **[Cortex](../cortex/README.md)** | Self-learning intelligence — cross-project patterns, decision tracking, self-evolution |
 | **Forge** (you are here) | Plugin builder — create full plugins from chat prompts |
+| **[codebase-radar](../codebase-radar/README.md)** | Hybrid semantic + BM25 search via LanceDB — find code by meaning, auto-reindex as you edit |
 
 **Forge + Sentinel:** Sentinel includes its own AI development toolkit (`/sentinel:ai-forge`) powered by 3 dedicated agents (ai-architect, ai-builder, ai-validator). When both plugins are installed, you can use either `/forge` (standalone pipeline with 5 agents) or `/sentinel:ai-forge` (integrated with Sentinel's data store and learnings). Forge is the specialist; Sentinel's ai-forge is the generalist that shares context with the other 8 categories.
+
+**Forge + codebase-radar:** When building a new plugin, use `/radar:search` to find how existing plugins in the codebase implement patterns before Forge generates new code. Research phase gets richer context, generated code matches conventions better.
 
 ---
 

@@ -397,7 +397,7 @@ This requires Python 3.10+ and installs via pip.
 
 ## Part of the PretInnov Plugin Ecosystem
 
-Clamper is one of 4 plugins in the [PretInnov Marketplace](../../README.md):
+Clamper is one of 5 plugins in the [PretInnov Marketplace](../../README.md):
 
 | Plugin | What It Does |
 |--------|-------------|
@@ -405,8 +405,11 @@ Clamper is one of 4 plugins in the [PretInnov Marketplace](../../README.md):
 | **Clamper** (you are here) | Code verification, project DNA, ecosystem scaffolding |
 | **[Cortex](../cortex/README.md)** | Self-learning intelligence — cross-project patterns, decision tracking, self-evolution |
 | **[Forge](../forge/README.md)** | Plugin builder — create full plugins from chat prompts |
+| **[codebase-radar](../codebase-radar/README.md)** | Hybrid semantic + BM25 search via LanceDB — find code by meaning, auto-reindex as you edit |
 
 **Clamper + Sentinel:** Sentinel's PreToolUse hook blocks dangerous edits before they happen. Clamper's verification loop checks code quality after. Together: prevention + verification. Sentinel handles the multi-agent code review, Clamper handles project DNA extraction and ecosystem initialization.
+
+**Clamper + codebase-radar:** radar-explorer finds code by concept (semantic search); Clamper maps fragile zones via git history. Together: the deepest codebase understanding available — conceptual search meets historical risk mapping.
 
 ---
 

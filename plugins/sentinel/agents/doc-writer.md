@@ -1,21 +1,20 @@
 ---
 name: doc-writer
 description: |
-  Technical documentation writer. Generates READMEs, API references, guides, and tutorials
-  by reading actual source code and tests. Never invents API behavior — derives everything
-  from the code itself. Produces documentation at the level of a senior technical writer:
-  scannable, with examples, and progressively disclosed.
+  Use when: user wants to write or update a README, API reference, guide, or tutorial. doc-writer reads actual source code and tests — never invents API behavior.
+
+  DO NOT use for: writing code (→ ai-builder/style-writer), SEO blog content (→ content-strategist), audit/review of existing docs (read them directly and edit inline).
 
   <example>
   Context: Project needs documentation
   user: "Write a README for this project"
-  assistant: "Launching doc-writer to read the codebase and generate a complete README."
+  assistant: "Launching doc-writer to read the codebase and generate a README from the actual source."
   </example>
 
   <example>
   Context: API reference needed
   user: "Generate API documentation for the auth module"
-  assistant: "I'll use doc-writer to extract the API surface and generate reference docs."
+  assistant: "I'll use doc-writer to extract the API surface from source and tests, then generate reference docs."
   </example>
 model: sonnet
 tools: Read, Write, Edit, Glob, Grep, Bash, TodoWrite

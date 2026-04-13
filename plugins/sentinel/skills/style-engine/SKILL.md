@@ -2,13 +2,15 @@
 name: style-engine
 version: 2.0.0
 description: >-
-  Output Style Manager. Use when the user wants to change how Claude responds — switch to
-  minimal/focused mode, educational/learning mode, or detailed/verbose mode. Also use when
-  the user says "be more concise", "explain more", "teach me", "just give me the code",
-  "more detail", "stop explaining", "switch to learning mode", "use focused mode".
-  Consolidates learning-output-style, explanatory-output-style, cortex output-styles.
+  Use when: user wants to change how Claude responds — switch output style or create a custom one.
+  Triggers on: "be more concise", "explain more", "teach me", "just give me the code",
+  "more detail", "stop explaining", "switch to learning mode", "use focused mode",
+  "create a pair-programming style", "change output style".
+  DO NOT trigger for: changing how Sentinel reviews code (→ sentinel config), changing hooks (→ dx-meta),
+  asking a general question about Claude behavior (answer inline).
 argument-hint: "[focused|learning|verbose] or describe desired style"
 allowed-tools: Read, Write, Edit, Glob, Bash, TodoWrite, Agent
+execution_mode: direct
 ---
 
 # Sentinel Style Engine — Output Style Manager

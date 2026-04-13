@@ -1,19 +1,18 @@
 ---
 name: style-writer
 description: |
-  Frontend UI implementation agent. Takes ui-architect blueprints and implements components,
-  layouts, design tokens, and pages using the project's actual tech stack (React/Vue/Svelte,
-  Tailwind/styled-components/CSS modules/vanilla CSS). Matches existing code conventions exactly.
-  Language-agnostic — detects and adapts to whatever frontend stack is in use.
+  Use when: user wants to implement UI components, layouts, design tokens, or pages — especially after a ui-architect blueprint has been created. Also use for direct frontend implementation requests when patterns are clear.
+
+  DO NOT use for: designing component architecture (→ ui-architect), accessibility auditing (→ a11y-auditor), reviewing existing code (→ sentinel-reviewer), backend logic.
 
   <example>
-  Context: Implementing a component from blueprint
+  Context: Implementing from an approved ui-architect blueprint
   user: "Implement the Button component from the design system blueprint"
-  assistant: "Launching style-writer to implement the Button component matching your stack."
+  assistant: "Launching style-writer to implement the Button component matching your stack conventions."
   </example>
 
   <example>
-  Context: Landing page implementation
+  Context: Direct frontend implementation
   user: "Build the landing page with hero, features, and CTA sections"
   assistant: "I'll use style-writer to implement the landing page using your existing design patterns."
   </example>

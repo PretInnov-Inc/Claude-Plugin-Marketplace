@@ -2,14 +2,16 @@
 name: doc-engine
 version: 2.0.0
 description: >-
-  Documentation and content strategy. Use when the user wants to write docs, READMEs,
-  API references, guides, tutorials, SEO content, blog posts, or analyze content gaps.
-  Consolidates content-research-writer, searchfit-seo, mintlify, document-skills (PDF/DOCX/PPTX/XLSX).
+  Use when: user wants to write docs, READMEs, API references, guides, tutorials, SEO content,
+  blog posts, or analyze content gaps. Reads actual source code — never invents API behavior.
   Triggers on: "write docs", "create README", "API documentation", "write a guide",
   "SEO content", "blog post", "content strategy", "keyword research", "content gap",
   "document this code", "generate docs", "technical writing", "on-page SEO".
-argument-hint: "[readme|api|guide|seo|content|export] [topic or path]"
+  DO NOT trigger for: fixing code bugs (→ sentinel), building new features (→ ai-forge),
+  UI component documentation (→ design-craft). Doc-engine reads code, not writes it.
+argument-hint: "[readme|api|guide|seo|content|strategy] [topic or path]"
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash, WebFetch, WebSearch, TodoWrite, Agent
+execution_mode: sequential
 ---
 
 # Sentinel Doc Engine — Documentation & Content
