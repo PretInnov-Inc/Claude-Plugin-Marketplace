@@ -41,8 +41,8 @@
     {
       "name": "sentinel",
       "source": "./plugins/sentinel",
-      "version": "3.0.0",
-      "description": "9-category unified intelligence plugin: code review, AI dev toolkit, browser testing, workflow memory, frontend design, documentation, infrastructure, DX tools, and output styles. 24 agents, 11 skills, 7 hook events.",
+      "version": "3.1.0",
+      "description": "9-category unified intelligence plugin: code review, AI dev toolkit, browser testing, workflow memory, frontend design, documentation, infrastructure, DX tools, and output styles. 24 agents, 12 skills, 7 hook events.",
       "author": {
         "name": "Siddharth Gupta"
       },
