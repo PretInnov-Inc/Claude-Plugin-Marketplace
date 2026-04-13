@@ -104,7 +104,7 @@ def _ast_chunk(content: str, language: str) -> Optional[list[dict]]:
     Returns None if tree-sitter is unavailable or parsing fails.
     """
     try:
-        from tree_sitter_languages import get_parser
+        from tree_sitter_language_pack import get_parser
         parser = get_parser(language)
     except Exception:
         return None

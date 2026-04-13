@@ -279,6 +279,37 @@ if not api_key:
 for the server to start. Optional/sensitive keys belong in the user's shell environment
 (`~/.zshrc`, `~/.bashrc`), not in plugin config.
 
+## 5a-2. Plugins with native deps must auto-bootstrap their venv
+
+Claude Code does NOT run `scripts/install.sh` automatically when installing a plugin.
+For plugins that ship an MCP server with native Python dependencies (lancedb, torch, etc.):
+
+- Without bootstrapping, end users see "MCP server failed to start" or "tools not available"
+- Asking users to manually run `bash scripts/install.sh` is a UX failure — most won't
+- The `SessionStart` hook is the ONLY place to auto-install on first run
+
+**Pattern:** at the top of `hooks-handlers/session-start.py`, check whether the venv exists
+at `${CLAUDE_PLUGIN_DATA}/venv/bin/python3`. If missing:
+
+1. Spawn `bash scripts/install.sh` in the background via `subprocess.Popen` with
+   `start_new_session=True` — never block the session
+2. Pass `CLAUDE_PLUGIN_ROOT` and `CLAUDE_PLUGIN_DATA` env vars explicitly so the script
+   uses the same paths Claude Code uses
+3. Tee output to `${CLAUDE_PLUGIN_DATA}/install.log` for debugging
+4. Emit a `systemMessage` telling the user the MCP tools are unavailable for *this*
+   session but will work next session
+5. Return early — don't run normal hook logic
+
+See `plugins/codebase-radar/hooks-handlers/session-start.py:42` (function `bootstrap_venv_if_missing`) for the canonical implementation.
+
+### Python version compatibility
+
+Pin requirements.txt to packages that support **current Python (3.12+)**, not just 3.10/3.11.
+Common gotcha: `tree-sitter-languages` is abandoned and only supports Python ≤3.11. Use
+`tree-sitter-language-pack` instead (same `get_parser()` API, supports Python 3.10+).
+
+When picking a dependency, verify on PyPI that `requires_python` covers the range users will have.
+
 ## 5b. hooks.json format — record, not array
 
 Claude Code expects `hooks/hooks.json` to use the **nested record format** keyed by event name.
@@ -368,7 +399,7 @@ Then run `bash scripts/sync-plugins.sh` to propagate locally.
 | Plugin | Version | Skills | Agents | Hook Events | Handlers | bin |
 |---|---|---|---|---|---|---|
 | clamper | 1.1.3 | 3 | 4 | 3 | 2 | 0 |
-| codebase-radar | 1.0.3 | 4 | 2 | 4 | 4 | 3 |
+| codebase-radar | 1.1.0 | 4 | 2 | 4 | 4 | 3 |
 | cortex | 1.0.3 | 12 | 8 | 6 | 5 | 1 |
 | forge | 1.0.3 | 8 | 5 | 4 | 3 | 2 |
 | sentinel | 3.1.1 | 12 | 24 | 7 | 8 | 6 |
@@ -458,6 +489,8 @@ Run `/doctor` after any plugin change to catch issues. Common errors:
 | `userConfig.X.type: Invalid option: expected one of "string"\|"number"\|"boolean"\|"directory"\|"file"` | Used `integer` or other invalid type | Use `"number"` for ints |
 | `Unknown skill: <name>` | Skill name in user invocation doesn't match any `name:` field in any SKILL.md frontmatter | Either rename the skill in SKILL.md, or create a thin alias skill (e.g. `skills/<short-name>/SKILL.md` that delegates) |
 | `MCP server X invalid: Missing environment variables: userConfig.Y` | `.mcp.json` references an optional/sensitive userConfig value the user hasn't set | Remove the `${userConfig.Y}` reference from `.mcp.json` env block; have the server read the secret from `os.environ` instead (see section 5a) |
+| MCP tools registered as deferred but never callable, "tools aren't available as deferred tools" | The MCP server can't start because its venv at `${CLAUDE_PLUGIN_DATA}/venv/bin/python3` doesn't exist (install.sh never ran) | Run `CLAUDE_PLUGIN_ROOT=... CLAUDE_PLUGIN_DATA=... bash scripts/install.sh` once. Long-term: add a venv auto-bootstrap to `SessionStart` hook (see section 5a-2) |
+| `Could not find a version that satisfies the requirement <pkg>` during install.sh | The pinned package version doesn't support the user's Python version | Switch to a maintained alternative (e.g. `tree-sitter-language-pack` instead of abandoned `tree-sitter-languages`) and verify `requires_python` on PyPI |
 | Plugin shows in `/plugin` but skills/hooks missing | Install cache stale (version not bumped) | Bump `version` in both `plugin.json` and `marketplace.json`, run `sync-plugins.sh` |
 
 ## 12. Debugging checklist — "Claude Code can't see my plugin changes"

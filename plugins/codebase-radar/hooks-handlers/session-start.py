@@ -39,6 +39,51 @@ def matches_exclusion(rel_path: str, patterns: list) -> bool:
     return False
 
 
+def bootstrap_venv_if_missing(plugin_data: str, plugin_root: str) -> dict | None:
+    """
+    If the MCP venv is missing, kick off install.sh in the background.
+    Returns a hook output dict if bootstrap was triggered, else None.
+    The MCP server cannot start without the venv, so this is the difference
+    between a working plugin and a broken one for first-time users.
+    """
+    import subprocess
+    venv_python = os.path.join(plugin_data, "venv", "bin", "python3")
+    if os.path.exists(venv_python):
+        return None
+
+    install_script = os.path.join(plugin_root, "scripts", "install.sh")
+    if not os.path.exists(install_script):
+        return None
+
+    log_path = os.path.join(plugin_data, "install.log")
+    os.makedirs(plugin_data, exist_ok=True)
+    env = os.environ.copy()
+    env["CLAUDE_PLUGIN_ROOT"] = plugin_root
+    env["CLAUDE_PLUGIN_DATA"] = plugin_data
+    try:
+        with open(log_path, "ab") as logf:
+            subprocess.Popen(
+                ["bash", install_script],
+                stdout=logf, stderr=logf,
+                env=env, start_new_session=True,
+            )
+    except Exception:
+        return None
+
+    return {
+        "hookSpecificOutput": {
+            "hookEventName": "SessionStart",
+            "additionalContext": (
+                "[codebase-radar] First-run: MCP server venv is missing. "
+                "Auto-installing dependencies in the background (lancedb, sentence-transformers, "
+                "tree-sitter — takes 2-5 minutes). The MCP search tools will be unavailable "
+                "this session but will work in the next session. "
+                f"Install log: {log_path}"
+            )
+        }
+    }
+
+
 def main():
     plugin_data = os.environ.get(
         "CLAUDE_PLUGIN_DATA",
@@ -48,6 +93,12 @@ def main():
         "CLAUDE_PLUGIN_ROOT",
         str(Path(__file__).parent.parent)
     )
+
+    # First-run bootstrap: install MCP venv if missing, then exit early
+    bootstrap = bootstrap_venv_if_missing(plugin_data, plugin_root)
+    if bootstrap is not None:
+        print(json.dumps(bootstrap))
+        return
 
     # Read stdin for session info
     session_id = os.environ.get("CLAUDE_SESSION_ID", "unknown")

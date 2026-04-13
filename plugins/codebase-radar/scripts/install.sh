@@ -211,9 +211,10 @@ echo "[+] Testing MCP server imports..."
 import lancedb
 import sentence_transformers
 import tree_sitter
+import tree_sitter_language_pack
 import mcp
 print('All MCP imports OK')
-" && echo "    lancedb, sentence_transformers, tree_sitter, mcp — OK" || {
+" && echo "    lancedb, sentence_transformers, tree_sitter, tree_sitter_language_pack, mcp — OK" || {
     echo "    WARNING: Some MCP imports failed. Check the output above."
     echo "    Try: ${VENV_PIP} install -r ${REQUIREMENTS}"
 }
