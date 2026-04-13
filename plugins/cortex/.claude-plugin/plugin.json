@@ -1,6 +1,6 @@
 {
   "name": "cortex",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Self-learning intelligence layer that auto-extracts learnings, mines patterns, tracks decisions, and continuously optimizes your Claude Code workflow across all projects and sessions.",
   "author": {
     "name": "Siddharth Gupta",
@@ -22,7 +22,6 @@
   "skills": [
     "./skills"
   ],
-  "hooks": "./hooks/hooks.json",
   "outputStyles": "./output-styles/",
   "userConfig": {
     "scope_task_threshold": {

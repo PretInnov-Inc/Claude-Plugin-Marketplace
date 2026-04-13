@@ -1,6 +1,6 @@
 {
   "name": "codebase-radar",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "Hybrid semantic + BM25 codebase search via LanceDB. Auto-indexes on session start, stays current as files change. Reduces token burn 40-60% on exploration-heavy sessions.",
   "homepage": "https://github.com/PretInnov-Inc/forge-marketplace/tree/main/plugins/codebase-radar",
   "license": "MIT",
@@ -9,12 +9,23 @@
     "url": "https://github.com/PretInnov-Inc"
   },
   "keywords": [
-    "semantic-search", "vector-search", "lancedb", "codebase-indexing",
-    "hybrid-search", "rag", "code-context", "bm25", "tree-sitter",
-    "sentence-transformers", "huggingface", "offline", "token-reduction"
+    "semantic-search",
+    "vector-search",
+    "lancedb",
+    "codebase-indexing",
+    "hybrid-search",
+    "rag",
+    "code-context",
+    "bm25",
+    "tree-sitter",
+    "sentence-transformers",
+    "huggingface",
+    "offline",
+    "token-reduction"
   ],
-  "skills": ["./skills"],
-  "hooks": "./hooks/hooks.json",
+  "skills": [
+    "./skills"
+  ],
   "userConfig": {
     "embedding_model": {
       "title": "Embedding Model",

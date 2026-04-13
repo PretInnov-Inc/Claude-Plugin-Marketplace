@@ -1,27 +1,51 @@
 {
-  "hooks": [
-    {
-      "event": "SessionStart",
-      "async": true,
-      "handler": "hooks-handlers/session-start.py",
-      "timeout": 20000
-    },
-    {
-      "event": "PostToolUse",
-      "matcher": "Write|Edit|MultiEdit",
-      "handler": "hooks-handlers/post-tool-reindex.py",
-      "timeout": 10000
-    },
-    {
-      "event": "PreToolUse",
-      "matcher": "Grep|Glob",
-      "handler": "hooks-handlers/pre-tool-suggest.py",
-      "timeout": 5000
-    },
-    {
-      "event": "Stop",
-      "handler": "hooks-handlers/session-stop.py",
-      "timeout": 30000
-    }
-  ]
+  "description": "codebase-radar lifecycle hooks: auto-index on session start, incremental re-index on edits, suggest semantic search on Grep/Glob, and prune stale entries on session stop.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks-handlers/session-start.py",
+            "timeout": 20
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks-handlers/post-tool-reindex.py",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Grep|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks-handlers/pre-tool-suggest.py",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks-handlers/session-stop.py",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
 }

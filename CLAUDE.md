@@ -65,39 +65,65 @@ Before editing any file in this repo, run the audit:
 python3 - <<'EOF'
 import json, os
 
-MARKETPLACE_ROOT = os.path.dirname(os.path.abspath(__file__)) if '__file__' in dir() else '.'
-mj = json.load(open(f'{MARKETPLACE_ROOT}/.claude-plugin/marketplace.json'))
+ROOT = '/Volumes/Mac/autonomous/Claude-Plugin-Marketplace'
+ALLOWED_TYPES = {"string", "number", "boolean", "directory", "file"}
+ALLOWED_USER_CONFIG_KEYS = {"title", "description", "type", "sensitive"}
+
+mj = json.load(open(f'{ROOT}/.claude-plugin/marketplace.json'))
 mj_plugins = {p['name']: p['version'] for p in mj['plugins']}
+print(f"marketplace.json v{mj['version']} — {len(mj_plugins)} plugins listed\n")
 
-print(f"marketplace.json v{mj['version']} — {len(mj_plugins)} plugins listed")
-print()
-
-plugins_dir = f'{MARKETPLACE_ROOT}/plugins'
-for name in sorted(os.listdir(plugins_dir)):
-    pj_path = f'{plugins_dir}/{name}/.claude-plugin/plugin.json'
+all_ok = True
+for name in sorted(os.listdir(f'{ROOT}/plugins')):
+    pj_path = f'{ROOT}/plugins/{name}/.claude-plugin/plugin.json'
     if not os.path.exists(pj_path):
-        print(f"  {name}: MISSING plugin.json")
-        continue
+        print(f"  ❌ {name}: MISSING plugin.json"); all_ok = False; continue
     pj = json.load(open(pj_path))
-    in_index = name in mj_plugins
-    ver_match = mj_plugins.get(name) == pj.get('version')
-    has_skills = 'skills' in pj
-    has_hooks = 'hooks' in pj
-    has_homepage = 'homepage' in pj
+    errs = []
+
+    # --- Identity & registry ---
+    if name not in mj_plugins:
+        errs.append("MISSING from marketplace.json")
+    elif mj_plugins[name] != pj.get('version'):
+        errs.append(f"version mismatch: marketplace={mj_plugins[name]} plugin.json={pj.get('version')}")
+    if 'skills' not in pj:        errs.append("MISSING required key: skills")
+    if 'homepage' not in pj:      errs.append("MISSING required key: homepage")
     author = pj.get('author', {})
-    correct_author = author.get('name') == 'Siddharth Gupta' and 'PretInnov-Inc' in author.get('url', '')
-    status = 'OK' if all([in_index, ver_match, has_skills, has_hooks, has_homepage, correct_author]) else 'FAIL'
-    print(f"  [{status}] {name} v{pj.get('version','?')}")
-    if not in_index:    print(f"         MISSING from marketplace.json")
-    if not ver_match:   print(f"         version mismatch: marketplace={mj_plugins.get(name)} plugin.json={pj.get('version')}")
-    if not has_skills:  print(f"         MISSING: \"skills\" key in plugin.json")
-    if not has_hooks:   print(f"         MISSING: \"hooks\" key in plugin.json")
-    if not has_homepage:print(f"         MISSING: \"homepage\" key in plugin.json")
-    if not correct_author: print(f"         WRONG author: {author}")
+    if author.get('name') != 'Siddharth Gupta' or 'PretInnov-Inc' not in author.get('url', ''):
+        errs.append(f"WRONG author: {author}")
+
+    # --- Forbidden: hooks declaration causes duplicate-load ---
+    if pj.get('hooks') == './hooks/hooks.json':
+        errs.append('FORBIDDEN: "hooks": "./hooks/hooks.json" (causes duplicate-load — auto-loaded)')
+
+    # --- userConfig schema ---
+    for k, cfg in pj.get('userConfig', {}).items():
+        if 'title' not in cfg:           errs.append(f"userConfig.{k}: missing 'title'")
+        if cfg.get('type') not in ALLOWED_TYPES:
+            errs.append(f"userConfig.{k}: invalid type '{cfg.get('type')}' (allowed: {ALLOWED_TYPES})")
+        for unknown in set(cfg) - ALLOWED_USER_CONFIG_KEYS:
+            errs.append(f"userConfig.{k}: forbidden key '{unknown}' (only title/description/type/sensitive allowed)")
+
+    # --- hooks.json format must be record (object), not array ---
+    hj_path = f'{ROOT}/plugins/{name}/hooks/hooks.json'
+    if os.path.exists(hj_path):
+        hj = json.load(open(hj_path))
+        if isinstance(hj.get('hooks'), list):
+            errs.append("hooks.json uses array format — must be record keyed by event name")
+
+    if errs:
+        all_ok = False
+        print(f"  ❌ {name} v{pj.get('version','?')}")
+        for e in errs: print(f"       {e}")
+    else:
+        print(f"  ✅ {name} v{pj['version']}")
+
+print()
+print("ALL OK — safe to commit." if all_ok else "ERRORS — fix before committing.")
 EOF
 ```
 
-All plugins must show `[OK]` before you commit or push.
+All plugins must show `✅` before you commit or push.
 
 ---
 
@@ -116,13 +142,68 @@ Every `plugins/<name>/.claude-plugin/plugin.json` MUST have ALL of these:
   },
   "homepage": "https://github.com/PretInnov-Inc/forge-marketplace/tree/main/plugins/<name>",
   "license": "MIT",
-  "skills": ["./skills"],
-  "hooks": "./hooks/hooks.json"
+  "skills": ["./skills"]
 }
 ```
 
 **Author format is strict.** Never use `"GuptaJi"`, a plugin name, or omit the `url`.
-The `skills` and `hooks` keys are load-time declarations — missing them = invisible components.
+The `skills` key is a load-time declaration — missing it = invisible skills.
+
+### CRITICAL: Do NOT declare `"hooks": "./hooks/hooks.json"`
+
+The standard `hooks/hooks.json` file is **auto-loaded by Claude Code**. Declaring it
+in `plugin.json` causes a "Duplicate hooks file detected" error and the plugin's
+hooks fail to register entirely.
+
+The `manifest.hooks` field is ONLY for *additional* hook files beyond the default.
+Since we never have additional hook files, never declare `hooks` in plugin.json.
+
+**Wrong (causes duplicate-load error):**
+```json
+{ "skills": ["./skills"], "hooks": "./hooks/hooks.json" }
+```
+
+**Right (default hooks.json auto-loaded):**
+```json
+{ "skills": ["./skills"] }
+```
+
+### CRITICAL: `userConfig` schema — strictly limited
+
+Each entry in `userConfig` may ONLY contain these 4 keys:
+
+| Key | Required | Type |
+|---|---|---|
+| `title` | YES | string |
+| `description` | YES | string |
+| `type` | YES | one of `"string"`, `"number"`, `"boolean"`, `"directory"`, `"file"` |
+| `sensitive` | YES | boolean |
+
+**Forbidden keys** (will cause manifest validation to fail):
+- `enum` — put allowed values in the `description` text instead
+- `default` — put default value in the `description` text instead
+- `minimum` / `maximum` — put range in the `description` text instead
+
+**Forbidden type values:**
+- `integer` — use `"number"` instead
+
+**Wrong (Sentinel v3.0.0 — failed validation):**
+```json
+"churn_threshold": {
+  "type": "integer", "default": 5, "minimum": 1, "maximum": 50,
+  "description": "Number of edits..."
+}
+```
+
+**Right (Sentinel v3.1.1 — passes validation):**
+```json
+"churn_threshold": {
+  "title": "Churn Threshold",
+  "description": "Number of edits to the same file before churn warning fires. Default: 5.",
+  "type": "number",
+  "sensitive": false
+}
+```
 
 ---
 
@@ -146,6 +227,58 @@ MUST have a corresponding entry here. Missing = plugin doesn't appear in `/plugi
 may prevent Claude Code from correctly resolving the install path.
 
 ---
+
+## 5b. hooks.json format — record, not array
+
+Claude Code expects `hooks/hooks.json` to use the **nested record format** keyed by event name.
+The flat array format will fail with `Invalid input: expected record, received array`.
+
+**Wrong (codebase-radar v1.0.0 — failed):**
+```json
+{
+  "hooks": [
+    {"event": "SessionStart", "handler": "hooks-handlers/session-start.py", "timeout": 20000}
+  ]
+}
+```
+
+**Right (the canonical format):**
+```json
+{
+  "description": "Plugin lifecycle hooks: ...",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks-handlers/session-start.py",
+            "timeout": 20
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks-handlers/post-tool.py",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Notes:
+- `hooks` is a **record** (object), keys are event names (`SessionStart`, `PostToolUse`, `PreToolUse`, `Stop`, `UserPromptSubmit`, `PreCompact`, etc.)
+- Each event maps to an **array of hook groups**, each with optional `matcher` regex and a nested `hooks` array
+- Each entry has `type: "command"`, `command` (with `${CLAUDE_PLUGIN_ROOT}`), and `timeout` in **seconds** (not milliseconds)
+- Use `python3 ${CLAUDE_PLUGIN_ROOT}/hooks-handlers/<file>.py` — never a bare relative path
 
 ## 6. Adding a new plugin — checklist
 
@@ -183,13 +316,13 @@ Then run `bash scripts/sync-plugins.sh` to propagate locally.
 
 | Plugin | Version | Skills | Agents | Hook Events | Handlers | bin |
 |---|---|---|---|---|---|---|
-| clamper | 1.1.2 | 3 | 4 | 3 | 2 | 0 |
-| codebase-radar | 1.0.0 | 4 | 2 | 4 | 4 | 3 |
-| cortex | 1.0.2 | 12 | 8 | 6 | 5 | 1 |
-| forge | 1.0.2 | 8 | 5 | 4 | 3 | 2 |
-| sentinel | 3.0.0 | 11 | 24 | 7 | 8 | 6 |
+| clamper | 1.1.3 | 3 | 4 | 3 | 2 | 0 |
+| codebase-radar | 1.0.2 | 4 | 2 | 4 | 4 | 3 |
+| cortex | 1.0.3 | 12 | 8 | 6 | 5 | 1 |
+| forge | 1.0.3 | 8 | 5 | 4 | 3 | 2 |
+| sentinel | 3.1.1 | 12 | 24 | 7 | 8 | 6 |
 
-**Total: 5 plugins, 38 skills, 43 agents, 24 hook events, 22 handlers, 12 bin tools**
+**Total: 5 plugins, 39 skills, 43 agents, 24 hook events, 22 handlers, 12 bin tools**
 
 When you add a component (skill, agent, handler), update this table.
 
@@ -259,6 +392,21 @@ The fix must be applied to `cache/pretinnov-plugins/<name>/<version>/.claude-plu
 not just the source. The fastest fix: bump the version so Claude Code creates a fresh install cache entry.
 
 ---
+
+## 11b. Errors you will see in `/doctor` and what they mean
+
+Run `/doctor` after any plugin change to catch issues. Common errors:
+
+| Error message | Root cause | Fix |
+|---|---|---|
+| `Duplicate hooks file detected: ./hooks/hooks.json` | `plugin.json` declares `"hooks": "./hooks/hooks.json"` (auto-loaded) | Remove the `hooks` key from `plugin.json` |
+| `Hook load failed: Invalid input: expected record, received array` | `hooks/hooks.json` uses flat `[...]` array | Convert to nested record format keyed by event (see section 5b) |
+| `userConfig.X.title: Invalid input: expected string, received undefined` | Missing `title` in a userConfig entry | Add `"title": "..."` to every userConfig entry |
+| `userConfig.X: Unrecognized key: "enum"` | `enum` not allowed in userConfig | Remove `enum`, document allowed values in `description` |
+| `userConfig.X: Unrecognized keys: "minimum", "maximum"` | Range constraints not allowed | Remove, document range in `description` |
+| `userConfig.X.type: Invalid option: expected one of "string"\|"number"\|"boolean"\|"directory"\|"file"` | Used `integer` or other invalid type | Use `"number"` for ints |
+| `Unknown skill: <name>` | Skill name in user invocation doesn't match any `name:` field in any SKILL.md frontmatter | Either rename the skill in SKILL.md, or create a thin alias skill (e.g. `skills/<short-name>/SKILL.md` that delegates) |
+| Plugin shows in `/plugin` but skills/hooks missing | Install cache stale (version not bumped) | Bump `version` in both `plugin.json` and `marketplace.json`, run `sync-plugins.sh` |
 
 ## 12. Debugging checklist — "Claude Code can't see my plugin changes"
 

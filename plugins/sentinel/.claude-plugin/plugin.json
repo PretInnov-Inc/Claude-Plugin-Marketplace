@@ -1,6 +1,6 @@
 {
   "name": "sentinel",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "description": "Sentinel v3 \u2014 9-category unified intelligence plugin. Code review, AI dev toolkit, output styles, browser testing, workflow memory, frontend design, documentation, infrastructure, and DX tools in one system.",
   "homepage": "https://github.com/PretInnov-Inc/forge-marketplace/tree/main/plugins/sentinel",
   "license": "MIT",
@@ -11,7 +11,6 @@
   "skills": [
     "./skills"
   ],
-  "hooks": "./hooks/hooks.json",
   "outputStyles": "./output-styles/",
   "keywords": [
     "code-review",
@@ -52,91 +51,76 @@
   ],
   "userConfig": {
     "output_style": {
+      "title": "Output Style",
+      "description": "Active output style injected at session start. Allowed: focused, learning, verbose. Default: focused.",
       "type": "string",
-      "enum": [
-        "focused",
-        "learning",
-        "verbose"
-      ],
-      "default": "focused",
-      "description": "Active output style injected at session start"
+      "sensitive": false
     },
     "churn_threshold": {
-      "type": "integer",
-      "default": 5,
-      "description": "Number of edits to the same file before churn warning fires"
+      "title": "Churn Threshold",
+      "description": "Number of edits to the same file before churn warning fires. Default: 5.",
+      "type": "number",
+      "sensitive": false
     },
     "confidence_threshold": {
-      "type": "integer",
-      "default": 80,
-      "minimum": 60,
-      "maximum": 95,
-      "description": "Review agent confidence threshold (lower = more findings)"
+      "title": "Confidence Threshold",
+      "description": "Review agent confidence threshold (lower = more findings). Range 60-95. Default: 80.",
+      "type": "number",
+      "sensitive": false
     },
     "memory_enabled": {
+      "title": "Memory Enabled",
+      "description": "Whether to inject past session learnings at SessionStart. Default: true.",
       "type": "boolean",
-      "default": true,
-      "description": "Whether to inject past session learnings at SessionStart"
+      "sensitive": false
     },
     "a11y_wcag_level": {
+      "title": "WCAG Conformance Level",
+      "description": "WCAG conformance level for accessibility audits. Allowed: A, AA, AAA. Default: AA.",
       "type": "string",
-      "enum": [
-        "A",
-        "AA",
-        "AAA"
-      ],
-      "default": "AA",
-      "description": "WCAG conformance level for accessibility audits"
+      "sensitive": false
     },
     "rollover_trigger": {
+      "title": "Rollover Trigger",
+      "description": "Session fork strategy. Allowed: manual (only on >rollover), graduated (warn 75% / offer 85% / auto-fork 95%), never (always compact). Default: graduated.",
       "type": "string",
-      "enum": [
-        "manual",
-        "graduated",
-        "never"
-      ],
-      "default": "graduated",
-      "description": "Session fork strategy: graduated = warn 75% / offer 85% / auto-fork 95%; manual = only on >rollover; never = always compact"
+      "sensitive": false
     },
     "tdd_enforcement": {
+      "title": "TDD Enforcement",
+      "description": "Test-first enforcement. Allowed: off (disabled), warn (advisory), block (hard PreToolUse gate on src/ writes without test/ sibling). Default: off.",
       "type": "string",
-      "enum": [
-        "off",
-        "warn",
-        "block"
-      ],
-      "default": "off",
-      "description": "Test-first enforcement: off=disabled, warn=advisory message, block=hard PreToolUse gate on src/ writes without test/ sibling"
+      "sensitive": false
     },
     "blueprint_gate": {
+      "title": "Blueprint Gate",
+      "description": "Require ai-architect blueprint approval before ai-builder writes files. Allowed: off, warn, block. Default: warn.",
       "type": "string",
-      "enum": [
-        "off",
-        "warn",
-        "block"
-      ],
-      "default": "warn",
-      "description": "Require ai-architect blueprint approval before ai-builder writes files"
+      "sensitive": false
     },
     "team_mode": {
+      "title": "Team Mode",
+      "description": "Team mode: lineage is per-user and gitignored; typed learnings are shared and committed. Default: false.",
       "type": "boolean",
-      "default": false,
-      "description": "Team mode: lineage is per-user and gitignored; typed learnings are shared and committed"
+      "sensitive": false
     },
     "risk_gating": {
+      "title": "Risk Gating",
+      "description": "Auto-classify diff risk tier (GREEN/YELLOW/RED/CRITICAL) before launching review agents \u2014 saves Opus tokens on trivial changes. Default: true.",
       "type": "boolean",
-      "default": true,
-      "description": "Auto-classify diff risk tier (GREEN/YELLOW/RED/CRITICAL) before launching review agents \u2014 saves Opus tokens on trivial changes"
+      "sensitive": false
     },
     "compression_enabled": {
+      "title": "Compression Enabled",
+      "description": "Enable PostToolUse output compression \u2014 debounced token saver, ~7k tokens/session. Default: true.",
       "type": "boolean",
-      "default": true,
-      "description": "Enable PostToolUse output compression \u2014 debounced token saver, ~7k tokens/session"
+      "sensitive": false
     },
     "design_system_enabled": {
+      "title": "Design System Enabled",
+      "description": "Load .sentinel/design-system.md at session start and detect UI drift on edits. Default: true.",
       "type": "boolean",
-      "default": true,
-      "description": "Load .sentinel/design-system.md at session start and detect UI drift on edits"
+      "sensitive": false
     }
   }
 }
