@@ -209,6 +209,193 @@ DEFAULT_MAX_LINE_COUNT = 10_000
 BINARY_SNIFF_BYTES = 8192
 
 
+# ────────── Inclusion allow-list (opt-out default behavior) ──────────
+#
+# Blacklists are a losing battle: new tools create new data directories and
+# new binary formats faster than you can update exclusions. For code search,
+# the only robust approach is an allow-list of source-code extensions — the
+# same strategy used by ripgrep's --type, GitHub code search, Sourcegraph.
+#
+# A file is INCLUDED for indexing if ANY of:
+#   * its extension is in DEFAULT_INCLUDE_EXTENSIONS, OR
+#   * its basename is in DEFAULT_INCLUDE_FILENAMES (for extensionless build
+#     files like Dockerfile, LICENSE, Makefile).
+#
+# Users can override via config.inclusions.{extensions, filenames}, or
+# disable allow-list mode entirely via config.inclusions.enabled=false
+# (falls back to pure exclusion-based filtering).
+
+DEFAULT_INCLUDE_EXTENSIONS = {
+    # Python
+    ".py", ".pyi", ".pyx", ".pxd",
+    # JavaScript / TypeScript
+    ".js", ".jsx", ".mjs", ".cjs",
+    ".ts", ".tsx", ".mts", ".cts",
+    # Web frameworks
+    ".vue", ".svelte", ".astro",
+    # Web markup / styles
+    ".html", ".htm", ".xhtml",
+    ".css", ".scss", ".sass", ".less", ".styl",
+    # JVM
+    ".java", ".kt", ".kts", ".scala", ".sc", ".groovy", ".gradle",
+    ".clj", ".cljs", ".cljc", ".edn",
+    # Systems
+    ".c", ".h", ".cc", ".cpp", ".cxx", ".hpp", ".hxx", ".hh",
+    ".m", ".mm",
+    ".go", ".rs", ".zig", ".d", ".nim", ".v", ".cr", ".odin",
+    # Shell
+    ".sh", ".bash", ".zsh", ".fish", ".ksh",
+    ".ps1", ".psm1", ".psd1",
+    ".bat", ".cmd",
+    # Scripting / interpreted
+    ".rb", ".php", ".pl", ".pm", ".tcl", ".lua",
+    ".r", ".jl",
+    # Functional
+    ".ex", ".exs", ".erl", ".hrl",
+    ".fs", ".fsi", ".fsx",
+    ".ml", ".mli", ".hs", ".lhs",
+    ".elm", ".purs",
+    # Mobile / Apple
+    ".swift", ".dart",
+    # .NET
+    ".cs", ".vb",
+    # Data / queries / schemas
+    ".sql", ".graphql", ".gql",
+    ".proto", ".thrift", ".avsc",
+    # Config / data formats — commonly source
+    ".yaml", ".yml", ".toml",
+    ".json", ".json5", ".jsonc",
+    ".xml", ".xsd", ".wsdl", ".plist",
+    ".ini", ".cfg", ".conf", ".config", ".properties",
+    # Infrastructure as code
+    ".tf", ".tfvars", ".hcl", ".nomad", ".nix",
+    ".dockerfile", ".containerfile",
+    # Build files
+    ".mk", ".cmake", ".bazel", ".bzl", ".buck",
+    # Go modules
+    ".mod", ".sum",
+    # Docs
+    ".md", ".mdx", ".markdown", ".rst",
+    ".adoc", ".asciidoc", ".org",
+    ".txt", ".text",
+    # Notebooks (JSON-backed, still text-searchable)
+    ".ipynb",
+    # Plugin/Claude-specific authoring formats
+    ".mdc",
+}
+
+DEFAULT_INCLUDE_FILENAMES = {
+    # Build files with no extension
+    "Dockerfile", "Containerfile",
+    "Makefile", "GNUmakefile", "makefile",
+    "Gemfile", "Rakefile", "Podfile", "Fastfile", "Appfile", "Matchfile",
+    "Vagrantfile", "Berksfile", "Thorfile",
+    "Jenkinsfile", "Brewfile",
+    "BUILD", "WORKSPACE", "MODULE.bazel", "BUILD.bazel",
+    "CMakeLists.txt",
+    # Licenses & docs (commonly no extension)
+    "LICENSE", "LICENCE", "COPYING", "COPYRIGHT", "NOTICE",
+    "AUTHORS", "CONTRIBUTORS", "MAINTAINERS",
+    "OWNERS", "CODEOWNERS",
+    "README", "CHANGELOG", "CHANGES", "HISTORY", "TODO", "ROADMAP",
+    "VERSION",
+    # Dotfiles that are source config
+    ".gitignore", ".gitattributes", ".gitmodules", ".mailmap",
+    ".dockerignore", ".npmignore", ".eslintignore", ".prettierignore",
+    ".editorconfig",
+    ".prettierrc", ".eslintrc", ".babelrc", ".stylelintrc",
+    ".env.example", ".env.template", ".env.sample", ".env.dist",
+}
+
+
+def _is_included(rel_path: str, extensions: set, filenames: set) -> bool:
+    """
+    Allow-list check. Returns True if rel_path should be indexed.
+    Only called when inclusions.enabled is True (default).
+    """
+    basename = os.path.basename(rel_path)
+    if basename in filenames:
+        return True
+    ext = os.path.splitext(basename)[1].lower()
+    if ext and ext in extensions:
+        return True
+    return False
+
+
+def _git_tracked_files(project_root: str):
+    """
+    Return relative paths of every file that git considers part of the
+    project tree starting at project_root, recursing into nested git
+    repositories. Returns None if project_root is not in a git repo or
+    git is unavailable.
+
+    Why recurse? `git ls-files` treats nested repositories (directories
+    containing their own .git/) as opaque — it lists them as "dirname/"
+    with a trailing slash and does NOT descend. That's correct for the
+    outer repo's perspective, but useless for a code-search indexer: the
+    user wants the ACTUAL files, not a placeholder. So for every such
+    nested-repo marker we encountered, we run `git ls-files` at that
+    location with the same --exclude-standard flag and merge results.
+    This preserves gitignore semantics independently in each repo,
+    matching what a developer expects.
+
+    Delegating to git means every .gitignore (nested, global, info/exclude),
+    along with negation rules and anchoring, is honored correctly without
+    us reimplementing the 20+ years of gitignore edge cases.
+    """
+    import subprocess
+    project_root_abs = os.path.abspath(project_root)
+    results: set = set()
+    visited: set = set()
+
+    def scan(scan_root: str) -> bool:
+        if scan_root in visited:
+            return True
+        visited.add(scan_root)
+        try:
+            probe = subprocess.run(
+                ["git", "-C", scan_root, "rev-parse", "--show-toplevel"],
+                capture_output=True, timeout=5,
+            )
+            if probe.returncode != 0:
+                return False
+            res = subprocess.run(
+                ["git", "-C", scan_root, "ls-files",
+                 "--cached", "--others", "--exclude-standard", "-z"],
+                capture_output=True, timeout=120,
+            )
+            if res.returncode != 0:
+                return False
+        except Exception:
+            return False
+
+        for raw in res.stdout.split(b"\x00"):
+            if not raw:
+                continue
+            try:
+                entry = raw.decode("utf-8")
+            except UnicodeDecodeError:
+                continue
+            abs_p = os.path.normpath(os.path.join(scan_root, entry))
+            # Keep only entries under project_root.
+            if abs_p != project_root_abs and not abs_p.startswith(project_root_abs + os.sep):
+                continue
+            # Nested-repo marker (trailing slash) or any directory-like
+            # entry that's actually a directory → recurse.
+            if entry.endswith("/") or os.path.isdir(abs_p):
+                if os.path.isdir(abs_p):
+                    scan(abs_p)
+                continue
+            if os.path.isfile(abs_p):
+                rel = os.path.relpath(abs_p, project_root_abs)
+                results.add(rel)
+        return True
+
+    if not scan(project_root_abs):
+        return None
+    return results or None
+
+
 def _compile_exclusions(patterns: list):
     """Classify patterns into (dir_names, file_globs, path_globs)."""
     dir_names: set = set()
@@ -415,6 +602,18 @@ def _index_codebase_impl(project_root: str, ph: str, incremental: bool,
     max_size = int(file_limits.get("max_file_size_bytes", DEFAULT_MAX_FILE_SIZE_BYTES))
     max_lines = int(file_limits.get("max_line_count", DEFAULT_MAX_LINE_COUNT))
 
+    # Allow-list (inclusion) rules. Enabled by default — see commentary on
+    # DEFAULT_INCLUDE_EXTENSIONS for rationale. Users can pass extra
+    # extensions/filenames (merged with defaults) or disable via enabled=false.
+    inclusions_cfg = config.get("inclusions", {}) or {}
+    inclusion_enabled = inclusions_cfg.get("enabled", True)
+    user_exts = inclusions_cfg.get("extensions") or []
+    user_names = inclusions_cfg.get("filenames") or []
+    include_extensions = DEFAULT_INCLUDE_EXTENSIONS | {
+        (e if e.startswith(".") else "." + e).lower() for e in user_exts
+    }
+    include_filenames = DEFAULT_INCLUDE_FILENAMES | set(user_names)
+
     state = _read_state()
     project_entry = state.get("projects", {}).get(ph, {})
     stored_hashes = project_entry.get("file_hashes", {})
@@ -433,62 +632,81 @@ def _index_codebase_impl(project_root: str, ph: str, incremental: bool,
 
     table = _open_or_create_table(db, table_name)
 
-    # Walk filesystem
+    # Build initial file candidate list.
+    #
+    # PRIMARY: `git ls-files` if project_root is inside a git repo — this
+    # delegates ALL gitignore interpretation (nested .gitignore, global
+    # gitignore, .git/info/exclude, negation rules) to git itself, which is
+    # the only correct implementation of gitignore semantics that exists.
+    #
+    # FALLBACK: os.walk with our bare-name dir pruning, for non-git trees.
     files_to_process = []       # (abs_path, rel_path, current_hash)
     all_rel_paths = set()
-    skipped_stats = {"excluded_dir": 0, "excluded_file": 0, "too_large": 0,
-                     "binary": 0, "too_many_lines": 0, "unreadable": 0}
+    skipped_stats = {"excluded_dir": 0, "excluded_file": 0, "not_included": 0,
+                     "too_large": 0, "binary": 0, "too_many_lines": 0,
+                     "unreadable": 0}
 
-    for root, dirs, files in os.walk(project_root):
-        # Prune excluded dirs in-place; `d in dir_names` is O(1) set lookup.
-        pruned = []
-        for d in dirs:
-            # The common case — bare directory name match — avoids the full
-            # rel-path check entirely.
-            if d in compiled_exclusions[0]:
-                skipped_stats["excluded_dir"] += 1
-                continue
-            d_rel = os.path.relpath(os.path.join(root, d), project_root)
-            if _matches_exclusion(d_rel, compiled_exclusions):
-                skipped_stats["excluded_dir"] += 1
-                continue
-            pruned.append(d)
-        dirs[:] = pruned
+    use_git = bool(config.get("use_git", True))
+    git_files = _git_tracked_files(project_root) if use_git else None
+    index_source = "git_ls_files" if git_files is not None else "filesystem_walk"
 
-        for fname in files:
-            abs_path = os.path.join(root, fname)
-            rel_path = os.path.relpath(abs_path, project_root)
-
-            if _matches_exclusion(rel_path, compiled_exclusions):
-                skipped_stats["excluded_file"] += 1
-                continue
-
-            # Single-pass head read: get hash + size + binary-sniff bytes.
-            current_hash, head, size = _read_head_and_hash(abs_path)
-            if current_hash is None:
+    def _process_candidate(abs_path, rel_path):
+        """Apply per-file filters and decide whether to queue for indexing."""
+        if _matches_exclusion(rel_path, compiled_exclusions):
+            skipped_stats["excluded_file"] += 1
+            return
+        if inclusion_enabled and not _is_included(
+            rel_path, include_extensions, include_filenames
+        ):
+            skipped_stats["not_included"] += 1
+            return
+        current_hash, head, size = _read_head_and_hash(abs_path)
+        if current_hash is None:
+            skipped_stats["unreadable"] += 1
+            return
+        reason = _file_filter_reason(abs_path, size, head, max_size, max_lines)
+        if reason:
+            if reason.startswith("size>"):
+                skipped_stats["too_large"] += 1
+            elif reason == "binary":
+                skipped_stats["binary"] += 1
+            elif reason.startswith("lines>"):
+                skipped_stats["too_many_lines"] += 1
+            else:
                 skipped_stats["unreadable"] += 1
+            return
+        all_rel_paths.add(rel_path)
+        if not incremental or force_full:
+            files_to_process.append((abs_path, rel_path, current_hash))
+        elif rel_path not in stored_hashes or stored_hashes[rel_path] != current_hash:
+            files_to_process.append((abs_path, rel_path, current_hash))
+
+    if git_files is not None:
+        # Sorted for deterministic indexing order (nicer progress output).
+        for rel_path in sorted(git_files):
+            abs_path = os.path.join(project_root, rel_path)
+            if not os.path.isfile(abs_path):
                 continue
+            _process_candidate(abs_path, rel_path)
+    else:
+        for root, dirs, files in os.walk(project_root):
+            # Prune excluded dirs in-place; `d in dir_names` is O(1) set lookup.
+            pruned = []
+            for d in dirs:
+                if d in compiled_exclusions[0]:
+                    skipped_stats["excluded_dir"] += 1
+                    continue
+                d_rel = os.path.relpath(os.path.join(root, d), project_root)
+                if _matches_exclusion(d_rel, compiled_exclusions):
+                    skipped_stats["excluded_dir"] += 1
+                    continue
+                pruned.append(d)
+            dirs[:] = pruned
 
-            # File-level guards: catch giant or binary files that slipped
-            # past path patterns (e.g. unknown-extension blobs).
-            reason = _file_filter_reason(abs_path, size, head, max_size, max_lines)
-            if reason:
-                if reason.startswith("size>"):
-                    skipped_stats["too_large"] += 1
-                elif reason == "binary":
-                    skipped_stats["binary"] += 1
-                elif reason.startswith("lines>"):
-                    skipped_stats["too_many_lines"] += 1
-                else:
-                    skipped_stats["unreadable"] += 1
-                continue
-
-            all_rel_paths.add(rel_path)
-
-            if not incremental or force_full:
-                files_to_process.append((abs_path, rel_path, current_hash))
-            elif rel_path not in stored_hashes or stored_hashes[rel_path] != current_hash:
-                files_to_process.append((abs_path, rel_path, current_hash))
+            for fname in files:
+                abs_path = os.path.join(root, fname)
+                rel_path = os.path.relpath(abs_path, project_root)
+                _process_candidate(abs_path, rel_path)
 
     # Process files: chunk, embed, upsert — STREAMING per-file.
     #
@@ -625,6 +843,7 @@ def _index_codebase_impl(project_root: str, ph: str, incremental: bool,
         "job": None,
         "error": None,
         "skipped": skipped_stats,
+        "index_source": index_source,
     }
     _write_state(state)
 
@@ -639,6 +858,7 @@ def _index_codebase_impl(project_root: str, ph: str, incremental: bool,
         "embedding_model": provider_info["model_id"],
         "last_indexed": now,
         "skipped": skipped_stats,
+        "index_source": index_source,
     }
 
 
@@ -668,10 +888,33 @@ def reindex_file(file_path: str) -> dict:
         project_hash = _project_hash(project_root)
 
     # File-level guards: a post-edit monster file shouldn't be re-embedded.
+    # Also enforce inclusion allow-list — a rename to an excluded extension
+    # should drop the file from the index rather than re-embed it.
     config = _load_config()
     file_limits = config.get("file_limits", {}) or {}
     max_size = int(file_limits.get("max_file_size_bytes", DEFAULT_MAX_FILE_SIZE_BYTES))
     max_lines = int(file_limits.get("max_line_count", DEFAULT_MAX_LINE_COUNT))
+    inclusions_cfg = config.get("inclusions", {}) or {}
+    inclusion_enabled = inclusions_cfg.get("enabled", True)
+    if inclusion_enabled:
+        user_exts = inclusions_cfg.get("extensions") or []
+        user_names = inclusions_cfg.get("filenames") or []
+        include_extensions = DEFAULT_INCLUDE_EXTENSIONS | {
+            (e if e.startswith(".") else "." + e).lower() for e in user_exts
+        }
+        include_filenames = DEFAULT_INCLUDE_FILENAMES | set(user_names)
+        rel_check = os.path.relpath(abs_path, project_root)
+        if not _is_included(rel_check, include_extensions, include_filenames):
+            db = lancedb.connect(_get_lancedb_root())
+            table = _open_or_create_table(db, _table_name(project_root))
+            try:
+                safe_fp = abs_path.replace("'", "\\'")
+                table.delete(f"file_path = '{safe_fp}'")
+            except Exception:
+                pass
+            _update_file_state(state, project_hash, project_root, rel_check, "")
+            _write_state(state)
+            return {"status": "skipped", "file": abs_path, "reason": "not_in_allow_list"}
     _, head, size = _read_head_and_hash(abs_path)
     if head is not None:
         skip_reason = _file_filter_reason(abs_path, size, head, max_size, max_lines)

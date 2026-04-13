@@ -154,6 +154,21 @@ def _default_config() -> dict:
             "max_file_size_bytes": 1_000_000,
             "max_line_count": 10_000,
         },
+        # Allow-list mode: only index files whose extension or basename is
+        # in the inclusion lists. See mcp/indexer.py for the defaults. Users
+        # can extend via `extensions` / `filenames` (merged with defaults)
+        # or disable with enabled=false to fall back to exclusion-only mode.
+        "inclusions": {
+            "enabled": True,
+            "extensions": [],
+            "filenames": [],
+        },
+        # If true and project_root is in a git repo, use `git ls-files
+        # --cached --others --exclude-standard` as the primary source of
+        # candidate files. This delegates ALL gitignore interpretation
+        # (nested .gitignore, global gitignore, .git/info/exclude, negation)
+        # to git itself. Falls back to os.walk for non-git projects.
+        "use_git": True,
         "index_locations": {
             "lancedb_root": ""
         },

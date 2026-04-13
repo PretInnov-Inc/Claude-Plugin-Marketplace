@@ -50,6 +50,12 @@
     "max_file_size_bytes": 1000000,
     "max_line_count": 10000
   },
+  "inclusions": {
+    "enabled": true,
+    "extensions": [],
+    "filenames": []
+  },
+  "use_git": true,
   "index_locations": {
     "lancedb_root": ""
   },

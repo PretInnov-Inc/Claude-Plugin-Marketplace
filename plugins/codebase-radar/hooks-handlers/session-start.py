@@ -78,6 +78,127 @@ def matches_exclusion(rel_path, compiled):
     return False
 
 
+# Allow-list defaults — MUST stay in sync with mcp/indexer.py
+# DEFAULT_INCLUDE_EXTENSIONS / DEFAULT_INCLUDE_FILENAMES.
+DEFAULT_INCLUDE_EXTENSIONS = {
+    ".py", ".pyi", ".pyx", ".pxd",
+    ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts",
+    ".vue", ".svelte", ".astro",
+    ".html", ".htm", ".xhtml",
+    ".css", ".scss", ".sass", ".less", ".styl",
+    ".java", ".kt", ".kts", ".scala", ".sc", ".groovy", ".gradle",
+    ".clj", ".cljs", ".cljc", ".edn",
+    ".c", ".h", ".cc", ".cpp", ".cxx", ".hpp", ".hxx", ".hh",
+    ".m", ".mm",
+    ".go", ".rs", ".zig", ".d", ".nim", ".v", ".cr", ".odin",
+    ".sh", ".bash", ".zsh", ".fish", ".ksh",
+    ".ps1", ".psm1", ".psd1", ".bat", ".cmd",
+    ".rb", ".php", ".pl", ".pm", ".tcl", ".lua", ".r", ".jl",
+    ".ex", ".exs", ".erl", ".hrl",
+    ".fs", ".fsi", ".fsx",
+    ".ml", ".mli", ".hs", ".lhs", ".elm", ".purs",
+    ".swift", ".dart", ".cs", ".vb",
+    ".sql", ".graphql", ".gql", ".proto", ".thrift", ".avsc",
+    ".yaml", ".yml", ".toml",
+    ".json", ".json5", ".jsonc",
+    ".xml", ".xsd", ".wsdl", ".plist",
+    ".ini", ".cfg", ".conf", ".config", ".properties",
+    ".tf", ".tfvars", ".hcl", ".nomad", ".nix",
+    ".dockerfile", ".containerfile",
+    ".mk", ".cmake", ".bazel", ".bzl", ".buck",
+    ".mod", ".sum",
+    ".md", ".mdx", ".markdown", ".rst", ".adoc", ".asciidoc", ".org",
+    ".txt", ".text",
+    ".ipynb", ".mdc",
+}
+
+DEFAULT_INCLUDE_FILENAMES = {
+    "Dockerfile", "Containerfile",
+    "Makefile", "GNUmakefile", "makefile",
+    "Gemfile", "Rakefile", "Podfile", "Fastfile", "Appfile", "Matchfile",
+    "Vagrantfile", "Berksfile", "Thorfile",
+    "Jenkinsfile", "Brewfile",
+    "BUILD", "WORKSPACE", "MODULE.bazel", "BUILD.bazel",
+    "CMakeLists.txt",
+    "LICENSE", "LICENCE", "COPYING", "COPYRIGHT", "NOTICE",
+    "AUTHORS", "CONTRIBUTORS", "MAINTAINERS",
+    "OWNERS", "CODEOWNERS",
+    "README", "CHANGELOG", "CHANGES", "HISTORY", "TODO", "ROADMAP",
+    "VERSION",
+    ".gitignore", ".gitattributes", ".gitmodules", ".mailmap",
+    ".dockerignore", ".npmignore", ".eslintignore", ".prettierignore",
+    ".editorconfig",
+    ".prettierrc", ".eslintrc", ".babelrc", ".stylelintrc",
+    ".env.example", ".env.template", ".env.sample", ".env.dist",
+}
+
+
+def is_included(rel_path, extensions, filenames):
+    """Return True if rel_path is on the allow-list."""
+    basename = os.path.basename(rel_path)
+    if basename in filenames:
+        return True
+    ext = os.path.splitext(basename)[1].lower()
+    if ext and ext in extensions:
+        return True
+    return False
+
+
+def git_tracked_files(project_root):
+    """
+    Return relative paths of every file git considers part of project_root,
+    recursing into nested git repositories. Mirrors mcp/indexer.py
+    _git_tracked_files. None if project_root isn't in a git repo.
+    """
+    import subprocess
+    project_root_abs = os.path.abspath(project_root)
+    results = set()
+    visited = set()
+
+    def scan(scan_root):
+        if scan_root in visited:
+            return True
+        visited.add(scan_root)
+        try:
+            probe = subprocess.run(
+                ["git", "-C", scan_root, "rev-parse", "--show-toplevel"],
+                capture_output=True, timeout=5,
+            )
+            if probe.returncode != 0:
+                return False
+            res = subprocess.run(
+                ["git", "-C", scan_root, "ls-files",
+                 "--cached", "--others", "--exclude-standard", "-z"],
+                capture_output=True, timeout=60,
+            )
+            if res.returncode != 0:
+                return False
+        except Exception:
+            return False
+        for raw in res.stdout.split(b"\x00"):
+            if not raw:
+                continue
+            try:
+                entry = raw.decode("utf-8")
+            except UnicodeDecodeError:
+                continue
+            abs_p = os.path.normpath(os.path.join(scan_root, entry))
+            if abs_p != project_root_abs and not abs_p.startswith(project_root_abs + os.sep):
+                continue
+            if entry.endswith("/") or os.path.isdir(abs_p):
+                if os.path.isdir(abs_p):
+                    scan(abs_p)
+                continue
+            if os.path.isfile(abs_p):
+                rel = os.path.relpath(abs_p, project_root_abs)
+                results.add(rel)
+        return True
+
+    if not scan(project_root_abs):
+        return None
+    return results or None
+
+
 def bootstrap_venv_if_missing(plugin_data: str, plugin_root: str) -> dict | None:
     """
     If the MCP venv is missing, kick off install.sh in the background.
@@ -244,37 +365,46 @@ def main():
     new_files = []
     current_files = set()
 
+    # Prefer git ls-files — cheaper than walking a 30k+ file tree, and
+    # authoritative about which files "count" as project content.
+    git_files = git_tracked_files(cwd)
+
+    def _record_candidate(abs_path, rel_path):
+        if matches_exclusion(rel_path, compiled_exclusions):
+            return
+        if not is_included(rel_path, DEFAULT_INCLUDE_EXTENSIONS, DEFAULT_INCLUDE_FILENAMES):
+            return
+        current_files.add(rel_path)
+        current_hash = compute_file_hash(abs_path)
+        if not current_hash:
+            return
+        if rel_path not in stored_hashes:
+            new_files.append(abs_path)
+        elif stored_hashes[rel_path] != current_hash:
+            changed_files.append(abs_path)
+
     try:
-        for root, dirs, files in os.walk(cwd):
-            # Prune excluded directories in-place. Cheap set lookup first;
-            # full matcher only for patterns that aren't bare dir names.
-            pruned = []
-            for d in dirs:
-                if d in compiled_exclusions[0]:
-                    continue
-                d_rel = os.path.relpath(os.path.join(root, d), cwd)
-                if matches_exclusion(d_rel, compiled_exclusions):
-                    continue
-                pruned.append(d)
-            dirs[:] = pruned
+        if git_files is not None:
+            for rel_path in git_files:
+                abs_path = os.path.join(cwd, rel_path)
+                if os.path.isfile(abs_path):
+                    _record_candidate(abs_path, rel_path)
+        else:
+            for root, dirs, files in os.walk(cwd):
+                pruned = []
+                for d in dirs:
+                    if d in compiled_exclusions[0]:
+                        continue
+                    d_rel = os.path.relpath(os.path.join(root, d), cwd)
+                    if matches_exclusion(d_rel, compiled_exclusions):
+                        continue
+                    pruned.append(d)
+                dirs[:] = pruned
 
-            for fname in files:
-                abs_path = os.path.join(root, fname)
-                rel_path = os.path.relpath(abs_path, cwd)
-
-                if matches_exclusion(rel_path, compiled_exclusions):
-                    continue
-
-                current_files.add(rel_path)
-                current_hash = compute_file_hash(abs_path)
-
-                if not current_hash:
-                    continue
-
-                if rel_path not in stored_hashes:
-                    new_files.append(abs_path)
-                elif stored_hashes[rel_path] != current_hash:
-                    changed_files.append(abs_path)
+                for fname in files:
+                    abs_path = os.path.join(root, fname)
+                    rel_path = os.path.relpath(abs_path, cwd)
+                    _record_candidate(abs_path, rel_path)
     except Exception:
         pass
 
