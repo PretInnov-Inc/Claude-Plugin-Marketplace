@@ -158,7 +158,24 @@ def _build_fts_index(table: lancedb.table.Table):
         pass  # FTS index is optional — hybrid search degrades to vector-only
 
 
-def index_codebase(path: str, incremental: bool = True, force_full: bool = False) -> dict:
+def _merge_project_state(ph: str, project_root: str, updates: dict):
+    """
+    Read-modify-write a single project's entry in index-state.json.
+
+    Other fields (file_hashes, last_indexed, etc.) on the project entry are
+    preserved. Used for progress updates so that concurrent `get_status` reads
+    see intermediate state.
+    """
+    state = _read_state()
+    entry = state.setdefault("projects", {}).setdefault(ph, {})
+    entry["project_root"] = project_root
+    for k, v in updates.items():
+        entry[k] = v
+    _write_state(state)
+
+
+def index_codebase(path: str, incremental: bool = True, force_full: bool = False,
+                   job_id: Optional[str] = None) -> dict:
     """
     Build or refresh the semantic search index for a project directory.
 
@@ -166,12 +183,49 @@ def index_codebase(path: str, incremental: bool = True, force_full: bool = False
         path: Absolute path to project root.
         incremental: If True, only process changed/new files.
         force_full: If True, clear all existing data and reindex from scratch.
+        job_id: Optional job id recorded in state so callers can correlate.
+
+    Writes progress to index-state.json as it runs so `get_status` can report
+    files_processed / files_total while indexing is in flight.
 
     Returns:
         Stats dict with files_indexed, chunks_total, duration_seconds, etc.
     """
     start_time = time.time()
     project_root = os.path.abspath(path)
+    ph = _project_hash(project_root)
+
+    # Mark job as started immediately so get_status reflects reality even if
+    # the caller (or a crash) never sees the return value.
+    _merge_project_state(ph, project_root, {
+        "status": "indexing",
+        "progress": {"files_processed": 0, "files_total": 0, "chunks_processed": 0, "current_file": None},
+        "job": {
+            "job_id": job_id,
+            "pid": os.getpid(),
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "incremental": incremental,
+            "force_full": force_full,
+        },
+        "error": None,
+    })
+
+    try:
+        return _index_codebase_impl(
+            project_root, ph, incremental, force_full, start_time
+        )
+    except Exception as e:
+        import traceback as _tb
+        _merge_project_state(ph, project_root, {
+            "status": "error",
+            "error": f"{type(e).__name__}: {e}",
+            "error_traceback": _tb.format_exc(),
+        })
+        raise
+
+
+def _index_codebase_impl(project_root: str, ph: str, incremental: bool,
+                         force_full: bool, start_time: float) -> dict:
     config = _load_config()
     exclusion_patterns = config.get("exclusions", {}).get("patterns", [
         "node_modules/**", ".git/**", "**/*.min.js", "**/*.lock",
@@ -180,7 +234,6 @@ def index_codebase(path: str, incremental: bool = True, force_full: bool = False
     ])
 
     state = _read_state()
-    ph = _project_hash(project_root)
     project_entry = state.get("projects", {}).get(ph, {})
     stored_hashes = project_entry.get("file_hashes", {})
 
@@ -227,65 +280,104 @@ def index_codebase(path: str, incremental: bool = True, force_full: bool = False
             elif rel_path not in stored_hashes or stored_hashes[rel_path] != current_hash:
                 files_to_process.append((abs_path, rel_path, current_hash))
 
-    # Process files: chunk, embed, upsert
+    # Process files: chunk, embed, upsert — STREAMING per-file.
+    #
+    # The previous implementation accumulated every chunk for every file into a
+    # single `pending_chunks` list before embedding. On a 12k-file / 100k-chunk
+    # tree that materialized hundreds of MB of text on top of the ~600 MB torch
+    # + MiniLM resident set and macOS Jetsam SIGKILL'd the process (exit 137).
+    #
+    # New shape: for each file, embed and upsert its chunks immediately in
+    # sub-batches of `batch_size`. Memory is bounded to one file's chunks plus
+    # the model. Hashes and per-file progress are persisted along the way so a
+    # killed run can resume on the next incremental call.
     new_hashes = dict(stored_hashes)
     files_indexed = 0
     chunks_total = 0
     batch_size = 32
 
-    # Collect all chunks before batching embeddings
-    pending_chunks = []
+    # I/O throttling: many small disk writes hurt on long runs. Persist
+    # progress every PROGRESS_EVERY files; persist file_hashes (the resume
+    # checkpoint, which can be MB-sized) less often.
+    PROGRESS_EVERY = 10
+    HASH_PERSIST_EVERY = 100
 
-    for abs_path, rel_path, file_hash in files_to_process:
+    # Report total up-front so `get_status` can show denominator while we work.
+    _merge_project_state(ph, project_root, {
+        "progress": {
+            "files_processed": 0,
+            "files_total": len(files_to_process),
+            "chunks_processed": 0,
+            "current_file": None,
+        }
+    })
+
+    for file_idx, (abs_path, rel_path, file_hash) in enumerate(files_to_process, start=1):
         chunks = chunk_file(abs_path)
         if not chunks:
             new_hashes[rel_path] = file_hash
+            files_indexed += 1
             continue
 
-        for chunk in chunks:
-            pending_chunks.append({
-                "_file_path": abs_path,
-                "_rel_path": rel_path,
-                "_file_hash": file_hash,
-                "_chunk": chunk
-            })
+        # Embed this file's chunks in sub-batches of batch_size so giant
+        # generated files (e.g. minified bundles that slipped past exclusions)
+        # still don't blow memory.
+        file_records = []
+        for i in range(0, len(chunks), batch_size):
+            sub = chunks[i:i + batch_size]
+            try:
+                vectors = embed_texts([c["text"] for c in sub])
+            except Exception as e:
+                # Skip individual file on embedding failure — don't kill the
+                # whole indexing run for one bad file.
+                _merge_project_state(ph, project_root, {
+                    "progress": {
+                        "files_processed": files_indexed,
+                        "files_total": len(files_to_process),
+                        "chunks_processed": chunks_total,
+                        "current_file": rel_path,
+                        "last_error": f"Skipped {rel_path}: {type(e).__name__}: {e}",
+                    }
+                })
+                file_records = []
+                break
 
-    # Embed in batches
-    if pending_chunks:
-        texts = [pc["_chunk"]["text"] for pc in pending_chunks]
-
-        for i in range(0, len(texts), batch_size):
-            batch_texts = texts[i:i + batch_size]
-            batch_pending = pending_chunks[i:i + batch_size]
-
-            vectors = embed_texts(batch_texts)
-
-            records = []
-            for j, (vec, pc) in enumerate(zip(vectors, batch_pending)):
-                chunk = pc["_chunk"]
-                cid = _chunk_id(pc["_file_path"], chunk["start_line"])
-                records.append({
-                    "chunk_id": cid,
-                    "file_path": pc["_file_path"],
-                    "relative_path": pc["_rel_path"],
+            for chunk, vec in zip(sub, vectors):
+                file_records.append({
+                    "chunk_id": _chunk_id(abs_path, chunk["start_line"]),
+                    "file_path": abs_path,
+                    "relative_path": rel_path,
                     "start_line": chunk["start_line"],
                     "end_line": chunk["end_line"],
                     "chunk_type": chunk["chunk_type"],
                     "language": chunk["language"],
                     "content": chunk["text"],
-                    "vector": [float(v) for v in vec]
+                    "vector": [float(v) for v in vec],
                 })
 
-            _upsert_chunks(table, records)
-            chunks_total += len(records)
+        if file_records:
+            _upsert_chunks(table, file_records)
+            chunks_total += len(file_records)
 
-            # Mark files as processed
-            seen_files = set()
-            for pc in batch_pending:
-                if pc["_rel_path"] not in seen_files:
-                    new_hashes[pc["_rel_path"]] = pc["_file_hash"]
-                    files_indexed += 1
-                    seen_files.add(pc["_rel_path"])
+        new_hashes[rel_path] = file_hash
+        files_indexed += 1
+
+        # Throttled progress write — every PROGRESS_EVERY files.
+        if files_indexed % PROGRESS_EVERY == 0 or file_idx == len(files_to_process):
+            update = {
+                "progress": {
+                    "files_processed": files_indexed,
+                    "files_total": len(files_to_process),
+                    "chunks_processed": chunks_total,
+                    "current_file": rel_path,
+                }
+            }
+            # Less-frequent: also persist file_hashes so a SIGKILL can resume.
+            if files_indexed % HASH_PERSIST_EVERY == 0:
+                update["file_hashes"] = new_hashes
+                update["files_indexed"] = files_indexed
+                update["chunks_total"] = chunks_total
+            _merge_project_state(ph, project_root, update)
 
     # Build FTS index after bulk upsert
     if files_to_process:
@@ -301,7 +393,8 @@ def index_codebase(path: str, incremental: bool = True, force_full: bool = False
     now = datetime.now(timezone.utc).isoformat()
     provider_info = get_provider_info()
 
-    # Update state
+    # Update state (preserve project_root, clear transient job info)
+    state = _read_state()  # re-read in case progress writes raced with us
     state.setdefault("projects", {})[ph] = {
         "project_root": project_root,
         "last_indexed": now,
@@ -312,7 +405,15 @@ def index_codebase(path: str, incremental: bool = True, force_full: bool = False
         "embedding_provider": provider_info["provider"],
         "dimensions": provider_info["dimensions"],
         "table_name": table_name,
-        "status": "complete"
+        "status": "complete",
+        "progress": {
+            "files_processed": len(new_hashes),
+            "files_total": len(new_hashes),
+            "chunks_processed": total_chunks_in_table,
+            "current_file": None,
+        },
+        "job": None,
+        "error": None,
     }
     _write_state(state)
 

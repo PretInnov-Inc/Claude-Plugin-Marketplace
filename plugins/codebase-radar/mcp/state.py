@@ -32,16 +32,37 @@ def _get_lancedb_root() -> str:
     return root
 
 
+def _deep_merge(base: dict, override: dict) -> dict:
+    """Deep-merge override into base. Override wins for scalar keys."""
+    result = dict(base)
+    for key, val in override.items():
+        if isinstance(val, dict) and isinstance(result.get(key), dict):
+            result[key] = _deep_merge(result[key], val)
+        else:
+            result[key] = val
+    return result
+
+
 def read_config() -> dict:
-    """Read config.json. Returns default config if file doesn't exist."""
+    """
+    Read config.json and merge it over defaults.
+
+    The persisted file is treated as a sparse override — any keys it omits
+    fall back to _default_config(). This prevents partial writes (e.g. the
+    session-stop stats update) from masking the full config on reads.
+    """
     config_path = _get_config_path()
+    defaults = _default_config()
     try:
         with open(config_path, "r") as f:
-            return json.load(f)
+            persisted = json.load(f)
     except FileNotFoundError:
-        return _default_config()
+        return defaults
     except Exception as e:
         raise RuntimeError(f"Failed to read config at '{config_path}': {e}")
+    if not isinstance(persisted, dict):
+        return defaults
+    return _deep_merge(defaults, persisted)
 
 
 def write_config(config: dict):
@@ -144,6 +165,18 @@ def get_status(project_root: str) -> dict:
     embedding_model = project_entry.get("embedding_model", "unknown")
     embedding_provider = project_entry.get("embedding_provider", "unknown")
     index_status = project_entry.get("status", "complete")
+    progress = project_entry.get("progress") or {}
+    job = project_entry.get("job") or {}
+
+    # Stale-job detection: if marked "indexing" but the pid is gone,
+    # downgrade to "error" so callers don't wait forever.
+    if index_status == "indexing" and job.get("pid"):
+        try:
+            os.kill(int(job["pid"]), 0)
+        except (ProcessLookupError, PermissionError, ValueError, TypeError):
+            index_status = "error"
+            project_entry["status"] = "error"
+            project_entry["error"] = "Indexing process exited without writing completion state."
 
     # Determine health
     health = "OK"
@@ -151,7 +184,18 @@ def get_status(project_root: str) -> dict:
 
     if index_status == "indexing":
         health = "WARNING"
-        health_notes.append("Indexing in progress")
+        pct = None
+        if progress.get("files_total"):
+            pct = round(100.0 * progress.get("files_processed", 0) / progress["files_total"], 1)
+        health_notes.append(
+            f"Indexing in progress: {progress.get('files_processed', 0)}"
+            f"/{progress.get('files_total', '?')} files"
+            + (f" ({pct}%)" if pct is not None else "")
+        )
+    elif index_status == "error":
+        health = "ERROR"
+        err = project_entry.get("error", "Indexing failed.")
+        health_notes.append(err)
     elif files_indexed == 0:
         health = "ERROR"
         health_notes.append("No files indexed")
@@ -197,7 +241,10 @@ def get_status(project_root: str) -> dict:
         "index_size_mb": index_size_mb,
         "health": health,
         "health_notes": health_notes,
-        "table_name": table_name
+        "table_name": table_name,
+        "progress": progress,
+        "job": job,
+        "error": project_entry.get("error"),
     }
 
 
@@ -299,17 +346,7 @@ def configure(updates: Optional[dict] = None) -> dict:
             "Run index_codebase to rebuild with the new chunk size."
         )
 
-    # Deep merge updates into config
-    def deep_merge(base: dict, override: dict) -> dict:
-        result = dict(base)
-        for key, val in override.items():
-            if isinstance(val, dict) and isinstance(result.get(key), dict):
-                result[key] = deep_merge(result[key], val)
-            else:
-                result[key] = val
-        return result
-
-    config = deep_merge(config, updates)
+    config = _deep_merge(config, updates)
     write_config(config)
 
     return {

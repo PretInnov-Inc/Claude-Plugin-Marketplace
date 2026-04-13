@@ -130,20 +130,61 @@ def main():
     except Exception:
         pass
 
-    # Update config.json stats
+    # Update config.json stats. CRITICAL: on first run, if config.json is missing,
+    # we must not write a stats-only file — that would strip defaults the MCP
+    # server depends on. Merge over the minimum default skeleton.
     config_path = os.path.join(plugin_data, "config.json")
     try:
-        config = {}
+        default_skeleton = {
+            "version": "1.0.0",
+            "embedding": {
+                "provider": "huggingface",
+                "model_id": "all-MiniLM-L6-v2",
+                "dimensions": 384,
+            },
+            "chunking": {
+                "chunk_size_tokens": 256,
+                "chunk_overlap_tokens": 32,
+                "ast_enabled": True,
+                "fallback": "character",
+            },
+            "search": {"top_k": 10, "hybrid_alpha": 0.7, "rerank": False},
+            "exclusions": {"patterns": exclusion_patterns},
+            "index_locations": {"lancedb_root": ""},
+            "stats": {
+                "total_sessions": 0,
+                "total_searches": 0,
+                "total_files_indexed": 0,
+            },
+        }
+
+        existing = {}
         if os.path.exists(config_path):
-            with open(config_path, "r") as f:
-                config = json.load(f)
+            try:
+                with open(config_path, "r") as f:
+                    loaded = json.load(f)
+                if isinstance(loaded, dict):
+                    existing = loaded
+            except Exception:
+                existing = {}
+
+        def _merge(base, override):
+            out = dict(base)
+            for k, v in override.items():
+                if isinstance(v, dict) and isinstance(out.get(k), dict):
+                    out[k] = _merge(out[k], v)
+                else:
+                    out[k] = v
+            return out
+
+        config = _merge(default_skeleton, existing)
 
         stats = config.setdefault("stats", {})
         stats["total_sessions"] = stats.get("total_sessions", 0) + 1
         stats["total_searches"] = stats.get("total_searches", 0) + search_count
         stats["total_files_indexed"] = max(
             stats.get("total_files_indexed", 0),
-            files_indexed
+            files_indexed,
         )
 
         with open(config_path, "w") as f:

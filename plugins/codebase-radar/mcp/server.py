@@ -10,9 +10,12 @@ Runs as a stdio MCP server using the mcp SDK.
 
 import asyncio
 import os
+import subprocess
 import sys
+import uuid
 import json
 import traceback
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -51,9 +54,43 @@ async def list_tools() -> list[types.Tool]:
         types.Tool(
             name="index_codebase",
             description=(
-                "Build or refresh the semantic search index for a codebase directory. "
-                "Chunks code files, embeds them, and stores in LanceDB. "
-                "Use incremental=true (default) to only process changed files."
+                "Build or refresh the semantic search index SYNCHRONOUSLY. Blocks "
+                "until complete and returns final stats. Suitable for small trees "
+                "(<1000 files) or one-shot scripts. For large codebases prefer "
+                "start_indexing, which returns immediately and runs in the background "
+                "— the MCP stdio tool channel has a timeout that will kill this call "
+                "on long indexes. Chunks code files, embeds, stores in LanceDB."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Absolute path to the project root to index."
+                    },
+                    "incremental": {
+                        "type": "boolean",
+                        "description": "If true (default), only reindex changed files.",
+                        "default": True
+                    },
+                    "force_full": {
+                        "type": "boolean",
+                        "description": "If true, clear and rebuild the entire index.",
+                        "default": False
+                    }
+                },
+                "required": ["path"]
+            }
+        ),
+        types.Tool(
+            name="start_indexing",
+            description=(
+                "Start semantic indexing as a detached background process and return "
+                "immediately with a job_id and pid. Use get_status to poll progress. "
+                "Preferred over index_codebase for large codebases (>1000 files) since "
+                "the MCP stdio tool channel has a timeout — long blocking calls will "
+                "kill the server. The background process writes progress to "
+                "index-state.json every batch (~32 chunks)."
             ),
             inputSchema={
                 "type": "object",
@@ -186,10 +223,78 @@ async def list_tools() -> list[types.Tool]:
     ]
 
 
+def _spawn_background_indexer(path: str, incremental: bool, force_full: bool) -> dict:
+    """
+    Launch run_index.py as a detached subprocess using the plugin venv.
+
+    Returns a dict describing the job. The subprocess inherits the MCP server's
+    env so RADAR_CONFIG_PATH / RADAR_STATE_PATH / RADAR_LANCEDB_ROOT point at
+    the same files this server reads from.
+    """
+    mcp_dir = Path(__file__).parent
+    run_index = mcp_dir / "run_index.py"
+    if not run_index.is_file():
+        raise RuntimeError(f"run_index.py not found at {run_index}")
+
+    # Use the same interpreter the MCP server runs under (the plugin venv).
+    python_bin = sys.executable
+    job_id = uuid.uuid4().hex[:12]
+
+    cmd = [
+        python_bin, str(run_index),
+        "--path", path,
+        "--job-id", job_id,
+    ]
+    if force_full:
+        cmd.append("--force-full")
+    else:
+        cmd.append("--incremental")
+
+    # Tee output to a log file so failures are debuggable even after the MCP
+    # server restarts. Log lives next to config.json.
+    data_dir = os.path.dirname(
+        os.environ.get("RADAR_STATE_PATH",
+                       os.path.expanduser("~/.local/share/claude-plugins/codebase-radar/index-state.json"))
+    )
+    os.makedirs(data_dir, exist_ok=True)
+    log_path = os.path.join(data_dir, f"index-job-{job_id}.log")
+
+    logf = open(log_path, "ab")
+    proc = subprocess.Popen(
+        cmd,
+        stdout=logf, stderr=logf, stdin=subprocess.DEVNULL,
+        start_new_session=True,
+        env=os.environ.copy(),
+        cwd=str(mcp_dir),
+    )
+    return {
+        "job_id": job_id,
+        "pid": proc.pid,
+        "path": path,
+        "incremental": incremental and not force_full,
+        "force_full": force_full,
+        "log_path": log_path,
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "message": (
+            "Indexing started in the background. Poll get_status with "
+            f"project_root='{path}' to track progress. Check log_path if it stalls."
+        ),
+    }
+
+
 @app.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
     try:
-        if name == "index_codebase":
+        if name == "start_indexing":
+            path = arguments.get("path", "")
+            if not path or not os.path.isdir(path):
+                return _error_text(f"Path does not exist or is not a directory: '{path}'")
+            incremental = arguments.get("incremental", True)
+            force_full = arguments.get("force_full", False)
+            result = _spawn_background_indexer(path, incremental=incremental, force_full=force_full)
+            return _ok_text(result)
+
+        elif name == "index_codebase":
             path = arguments.get("path", "")
             if not path or not os.path.isdir(path):
                 return _error_text(f"Path does not exist or is not a directory: '{path}'")
