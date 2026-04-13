@@ -18,6 +18,9 @@
     "skills",
     "scaffolding"
   ],
+  "homepage": "https://github.com/PretInnov-Inc/forge-marketplace/tree/main/plugins/clamper",
   "license": "MIT",
+  "skills": ["./skills"],
+  "hooks": "./hooks/hooks.json",
   "commands": ["./commands"]
 }

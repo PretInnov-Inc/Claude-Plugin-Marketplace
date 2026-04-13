@@ -15,8 +15,10 @@
     "forge",
     "architecture"
   ],
+  "homepage": "https://github.com/PretInnov-Inc/forge-marketplace/tree/main/plugins/forge",
   "license": "MIT",
   "skills": ["./skills"],
+  "hooks": "./hooks/hooks.json",
   "userConfig": {
     "research_depth": {
       "title": "Research Depth",

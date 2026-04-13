@@ -1,12 +1,16 @@
 {
   "name": "sentinel",
-  "description": "Sentinel v3 — 9-category unified intelligence plugin. Code review, AI dev toolkit, output styles, browser testing, workflow memory, frontend design, documentation, infrastructure, and DX tools in one system.",
   "version": "3.0.0",
-  "homepage": "https://github.com/guptaji/autonomous/sentinel",
+  "description": "Sentinel v3 — 9-category unified intelligence plugin. Code review, AI dev toolkit, output styles, browser testing, workflow memory, frontend design, documentation, infrastructure, and DX tools in one system.",
+  "homepage": "https://github.com/PretInnov-Inc/forge-marketplace/tree/main/plugins/sentinel",
   "license": "MIT",
   "author": {
-    "name": "GuptaJi"
+    "name": "Siddharth Gupta",
+    "url": "https://github.com/PretInnov-Inc"
   },
+  "skills": ["./skills"],
+  "hooks": "./hooks/hooks.json",
+  "outputStyles": "./output-styles/",
   "keywords": [
     "code-review", "security", "verification", "quality", "testing",
     "ai-development", "plugin-building", "agent-design", "mcp-server",
