@@ -111,6 +111,18 @@ for name in sorted(os.listdir(f'{ROOT}/plugins')):
         if isinstance(hj.get('hooks'), list):
             errs.append("hooks.json uses array format — must be record keyed by event name")
 
+    # --- .mcp.json must not reference sensitive userConfig values ---
+    mcp_path = f'{ROOT}/plugins/{name}/.mcp.json'
+    if os.path.exists(mcp_path):
+        mcp = json.load(open(mcp_path))
+        sensitive_keys = {k for k, c in pj.get('userConfig', {}).items() if c.get('sensitive')}
+        for srv_name, srv in mcp.get('mcpServers', {}).items():
+            for env_key, env_val in (srv.get('env') or {}).items():
+                if isinstance(env_val, str) and '${userConfig.' in env_val:
+                    ref_key = env_val.split('${userConfig.')[1].split('}')[0]
+                    if ref_key in sensitive_keys:
+                        errs.append(f".mcp.json env.{env_key} references sensitive userConfig.{ref_key} — will fail if user has not set it")
+
     if errs:
         all_ok = False
         print(f"  ❌ {name} v{pj.get('version','?')}")
@@ -228,6 +240,45 @@ may prevent Claude Code from correctly resolving the install path.
 
 ---
 
+## 5a. `.mcp.json` env vars — never reference optional userConfig
+
+When a plugin ships an MCP server (`.mcp.json` at plugin root), Claude Code resolves
+`${userConfig.X}` placeholders **eagerly at server startup**. If the user hasn't set
+the value, the MCP server fails to load with:
+
+```
+MCP server <name> invalid: Missing environment variables: userConfig.X
+```
+
+This breaks ALL of the plugin's MCP tools — even when the missing config is for an
+optional code path the user isn't using.
+
+**Wrong (codebase-radar v1.0.2 — failed for users who didn't set OpenAI keys):**
+```json
+"env": {
+  "OPENAI_API_KEY": "${userConfig.openai_api_key}",
+  "VOYAGEAI_API_KEY": "${userConfig.voyageai_api_key}"
+}
+```
+
+**Right (let the server read from `os.environ` itself):**
+```json
+"env": {
+  "RADAR_CONFIG_PATH": "${CLAUDE_PLUGIN_DATA}/config.json"
+}
+```
+
+Then in the server code, read optional secrets from the standard environment:
+```python
+api_key = os.environ.get("OPENAI_API_KEY", "")
+if not api_key:
+    raise RuntimeError("OPENAI_API_KEY environment variable not set...")
+```
+
+**Rule:** Only put `${userConfig.X}` in `.mcp.json` env if the value is **strictly required**
+for the server to start. Optional/sensitive keys belong in the user's shell environment
+(`~/.zshrc`, `~/.bashrc`), not in plugin config.
+
 ## 5b. hooks.json format — record, not array
 
 Claude Code expects `hooks/hooks.json` to use the **nested record format** keyed by event name.
@@ -317,7 +368,7 @@ Then run `bash scripts/sync-plugins.sh` to propagate locally.
 | Plugin | Version | Skills | Agents | Hook Events | Handlers | bin |
 |---|---|---|---|---|---|---|
 | clamper | 1.1.3 | 3 | 4 | 3 | 2 | 0 |
-| codebase-radar | 1.0.2 | 4 | 2 | 4 | 4 | 3 |
+| codebase-radar | 1.0.3 | 4 | 2 | 4 | 4 | 3 |
 | cortex | 1.0.3 | 12 | 8 | 6 | 5 | 1 |
 | forge | 1.0.3 | 8 | 5 | 4 | 3 | 2 |
 | sentinel | 3.1.1 | 12 | 24 | 7 | 8 | 6 |
@@ -406,6 +457,7 @@ Run `/doctor` after any plugin change to catch issues. Common errors:
 | `userConfig.X: Unrecognized keys: "minimum", "maximum"` | Range constraints not allowed | Remove, document range in `description` |
 | `userConfig.X.type: Invalid option: expected one of "string"\|"number"\|"boolean"\|"directory"\|"file"` | Used `integer` or other invalid type | Use `"number"` for ints |
 | `Unknown skill: <name>` | Skill name in user invocation doesn't match any `name:` field in any SKILL.md frontmatter | Either rename the skill in SKILL.md, or create a thin alias skill (e.g. `skills/<short-name>/SKILL.md` that delegates) |
+| `MCP server X invalid: Missing environment variables: userConfig.Y` | `.mcp.json` references an optional/sensitive userConfig value the user hasn't set | Remove the `${userConfig.Y}` reference from `.mcp.json` env block; have the server read the secret from `os.environ` instead (see section 5a) |
 | Plugin shows in `/plugin` but skills/hooks missing | Install cache stale (version not bumped) | Bump `version` in both `plugin.json` and `marketplace.json`, run `sync-plugins.sh` |
 
 ## 12. Debugging checklist — "Claude Code can't see my plugin changes"

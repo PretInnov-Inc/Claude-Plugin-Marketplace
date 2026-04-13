@@ -8,9 +8,7 @@
         "RADAR_CONFIG_PATH": "${CLAUDE_PLUGIN_DATA}/config.json",
         "RADAR_STATE_PATH": "${CLAUDE_PLUGIN_DATA}/index-state.json",
         "RADAR_LANCEDB_ROOT": "${CLAUDE_PLUGIN_DATA}/lancedb",
-        "RADAR_LOG_PATH": "${CLAUDE_PLUGIN_DATA}/search-log.jsonl",
-        "OPENAI_API_KEY": "${userConfig.openai_api_key}",
-        "VOYAGEAI_API_KEY": "${userConfig.voyageai_api_key}"
+        "RADAR_LOG_PATH": "${CLAUDE_PLUGIN_DATA}/search-log.jsonl"
       }
     }
   }
