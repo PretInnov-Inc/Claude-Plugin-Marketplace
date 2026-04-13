@@ -1,8 +1,8 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "pretinnov-plugins",
-  "version": "1.0.0",
-  "description": "Production-grade Claude Code plugins: verification loops, self-learning intelligence, and plugin creation from prompts.",
+  "version": "1.1.0",
+  "description": "Production-grade Claude Code plugins: verification loops, self-learning intelligence, plugin creation from prompts, semantic codebase search, and unified code review.",
   "owner": {
     "name": "PretInnov Technologies",
     "email": "pretinnovofficial@gmail.com"
@@ -11,7 +11,7 @@
     {
       "name": "clamper",
       "source": "./plugins/clamper",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "description": "Verification loop, deep project DNA extraction, and one-command ecosystem initialization. Clip it, Clamp it.",
       "author": {
         "name": "Siddharth Gupta"
@@ -21,7 +21,7 @@
     {
       "name": "cortex",
       "source": "./plugins/cortex",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "description": "Self-learning intelligence layer that captures learnings, patterns, and decisions across sessions and injects them back automatically.",
       "author": {
         "name": "Siddharth Gupta"
@@ -31,7 +31,7 @@
     {
       "name": "forge",
       "source": "./plugins/forge",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "description": "Meta-plugin that creates production-grade Claude Code plugins through a 4-phase pipeline: internet research, clarifying questions, architecture blueprint, and full code generation.",
       "author": {
         "name": "Siddharth Gupta"
@@ -41,8 +41,18 @@
     {
       "name": "sentinel",
       "source": "./plugins/sentinel",
+      "version": "3.0.0",
+      "description": "9-category unified intelligence plugin: code review, AI dev toolkit, browser testing, workflow memory, frontend design, documentation, infrastructure, DX tools, and output styles. 24 agents, 11 skills, 7 hook events.",
+      "author": {
+        "name": "Siddharth Gupta"
+      },
+      "category": "code-quality"
+    },
+    {
+      "name": "codebase-radar",
+      "source": "./plugins/codebase-radar",
       "version": "1.0.0",
-      "description": "Unified code review engine with 6 specialized agents, adaptive confidence scoring, security blocking, risk classification, and churn detection. Works with or without git.",
+      "description": "Hybrid semantic + BM25 codebase search via LanceDB. Auto-indexes on session start, stays current as files change. Reduces token burn 40-60% on exploration-heavy sessions.",
       "author": {
         "name": "Siddharth Gupta"
       },
